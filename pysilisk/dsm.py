@@ -1,6 +1,20 @@
-__author__ = 'harold'
+
 
 class DiskPage(object):
+    """ """
+
+    PAGE_SIZE = 4096  # Size of a physical disk-page
+
+    ID_SIZE = 4  # Number of bytes used to store the page-id
+
+    NEXT_PAGE_ID_SIZE = 4  # Number of bytes used to store the next-page-id
+
+    # Size of the available data in the disk-page
+    PAGE_DATA_SIZE = PAGE_SIZE - ID_SIZE - NEXT_PAGE_ID_SIZE
+
+    def __init__(self, page_id):
+        if page_id < 0:
+            raise ValueError("Page-id must be greater than or equal to zero")
 
     @property
     def id(self):
@@ -16,23 +30,25 @@ class DiskPage(object):
 
 
 class DiskSpaceManager(object):
-
-    def __init__(self):
+    def __init__(self, filename):
         pass
 
-    def create_file(self, filename):
+    def create_file(self, num_pages):
+        """Creates a file (database space) with 'num_pages' pages.
+        num_pages - it should be at least 2.
+        """
         pass
 
     def delete_file(self):
         pass
 
-    def open_file(self, filename):
+    def open_file(self):
         pass
 
     def close_file(self):
         pass
 
-    def allocate_new_page(self):
+    def get_free_page(self):
         pass
 
     def release_page(self, page_id):
