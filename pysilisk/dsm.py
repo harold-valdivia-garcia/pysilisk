@@ -12,21 +12,31 @@ class DiskPage(object):
     # Size of the available data in the disk-page
     PAGE_DATA_SIZE = PAGE_SIZE - ID_SIZE - NEXT_PAGE_ID_SIZE
 
-    def __init__(self, page_id):
-        if page_id < 0:
-            raise ValueError("Page-id must be greater than or equal to zero")
+    def __init__(self, page_id=-1):
+        if page_id < -1:
+            raise ValueError("Page-id must be greater than or equal to -1")
 
     @property
     def id(self):
         pass
 
     @property
-    def next_page_id(self):
+    def next_page_pointer(self):
         pass
 
     @property
     def data(self):
         pass
+
+    @staticmethod
+    def from_bytes(array_bytes):
+        disk_page = None
+        return disk_page
+
+    @staticmethod
+    def to_bytes(disk_page):
+        array_bytes = None
+        return array_bytes
 
 
 class DiskSpaceManager(object):
