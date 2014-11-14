@@ -38,4 +38,30 @@ class TestDiskPage(TestCase):
         self.assertEqual(data, disk_page.data)
 
     def test_to_bytes(self):
-        pass
+        # Create a disk-page
+        disk_page = DiskPage()
+
+        # Generate a random content for the page
+        data = bytearray(os.urandom(DiskPage.PAGE_DATA_SIZE))
+        disk_page.data = data
+
+        # Set the id and the next-page
+        id_page = 17
+        disk_page.id = id_page
+        nex_id = 33
+        disk_page.next_page_pointer = nex_id
+
+        # Convert to bytes
+        array_bytes = DiskPage.to_bytes(disk_page)
+        self.assertEqual(len(array_bytes), DiskPage.PAGE_SIZE)
+
+        # Wrap it with a in-memory stream
+        buffer = io.BytesIO(array_bytes)
+
+        # get the fields from the bytes
+        data_from_bytes = buffer.read(DiskPage.PAGE_DATA_SIZE)
+        id_from_bytes, next_id_from_bytes = struct.unpack('<ii', buffer.read(8))
+
+        self.assertEqual(data, data_from_bytes)
+        self.assertEqual(id_page, id_from_bytes)
+        self.assertEqual(nex_id, next_id_from_bytes)
