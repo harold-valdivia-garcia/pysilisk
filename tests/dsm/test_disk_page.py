@@ -65,3 +65,15 @@ class TestDiskPage(TestCase):
         self.assertEqual(data, data_from_bytes)
         self.assertEqual(id_page, id_from_bytes)
         self.assertEqual(nex_id, next_id_from_bytes)
+
+    def test_data(self):
+        disk_page = DiskPage()
+
+        with self.assertRaises(ValueError):
+            disk_page.data = bytearray(DiskPage.PAGE_DATA_SIZE+1)
+
+        with self.assertRaises(ValueError):
+            disk_page.data = bytearray(DiskPage.PAGE_DATA_SIZE-1)
+
+        # It shouldn't throw any exception
+        disk_page.data = bytearray(DiskPage.PAGE_DATA_SIZE)
