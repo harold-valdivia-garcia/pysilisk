@@ -39,15 +39,14 @@ class TestDiskPage(TestCase):
 
     def test_to_bytes(self):
         # Create a disk-page
-        disk_page = DiskPage()
+        id_page = 17
+        disk_page = DiskPage(id_page)
 
         # Generate a random content for the page
         data = bytearray(os.urandom(DiskPage.PAGE_DATA_SIZE))
         disk_page.data = data
 
         # Set the id and the next-page
-        id_page = 17
-        disk_page.id = id_page
         nex_id = 33
         disk_page.next_page_pointer = nex_id
 
