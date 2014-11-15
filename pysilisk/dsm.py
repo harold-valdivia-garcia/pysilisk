@@ -15,18 +15,25 @@ class DiskPage(object):
     def __init__(self, page_id=-1):
         if page_id < -1:
             raise ValueError("Page-id must be greater than or equal to -1")
+        self._data = bytearray(DiskPage.PAGE_DATA_SIZE)
+        self._id = page_id
+        self.next_page_pointer = -1
 
     @property
     def id(self):
-        pass
-
-    @property
-    def next_page_pointer(self):
-        pass
+        return self._id
 
     @property
     def data(self):
-        pass
+        #return bytes(self._data)
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        if len(value) != DiskPage.PAGE_DATA_SIZE:
+            raise ValueError('The length of argument value must'
+                             ' be the same as PAGE_DATA_SIZE')
+        self._data[:] = value  # This ensure not to change the _data's type
 
     @staticmethod
     def from_bytes(array_bytes):
