@@ -7,8 +7,8 @@ class TestDiskSpaceManager(TestCase):
 
     def setUp(self):
         # Create a 10-pages database
-        self.database_filename = 'test_database.db'
-        self.dsm = DiskSpaceManager(self.database_filename)
+        self.test_database_filename = 'test_database.db'
+        self.dsm = DiskSpaceManager(self.test_database_filename)
         self.num_pages = 10
         self.dsm.create_file(self.num_pages)
 
@@ -39,9 +39,7 @@ class TestDiskSpaceManager(TestCase):
         dsm = DiskSpaceManager(filename)
         # An indirect way to check if the file is opened
         with self.assertRaises(OSError):
-            self.dsm.open_file()
-            self.dsm.delete_file()  # raise exception because it is open
-        self.dsm.close_file()
+            dsm.open_file()  # raise exception because it's not created
 
     @extra_setup_teardown
     def test_get_free_and_release_pages(self):
@@ -82,7 +80,7 @@ class TestDiskSpaceManager(TestCase):
             self.assertEqual(disk_page.data, list_data[i])
 
         # Try to write outside the database-space
-        with self.assertRaises(OSError):
+        with self.assertRaises(ValueError):
             disk_page = DiskPage(self.num_pages+10)
             self.dsm.write_page(disk_page)
 
