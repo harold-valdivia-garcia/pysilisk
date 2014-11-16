@@ -13,7 +13,8 @@ class DiskPage(object):
     # Size of the available data in the disk-page
     PAGE_DATA_SIZE = PAGE_SIZE - ID_SIZE - NEXT_PAGE_ID_SIZE
 
-    # struct-format to pack/unpack a disk-page into/from bytes
+    # struct-format to pack/unpack a disk-page into/from bytes.
+    # The integers are packed using little-endian (<)
     FMT_PACK_UNPACK_PAGE = '<{data_size}sii'.format(data_size=PAGE_DATA_SIZE)
 
     def __init__(self, page_id=-1):
@@ -41,11 +42,19 @@ class DiskPage(object):
 
     @staticmethod
     def from_bytes(array_bytes):
-        disk_page = None
+        # Unpack the bytes into "data, "id" and "next"
+        fields = struct.unpack(DiskPage.FMT_PACK_UNPACK_PAGE, array_bytes)
+        data, page_id, next_page_pointer = fields
+
+        # Create the page
+        disk_page = DiskPage(page_id)
+        disk_page.data = data
+        disk_page.next_page_pointer = next_page_pointer
         return disk_page
 
     @staticmethod
     def to_bytes(disk_page):
+        # Pack the disk_page as bytes
         array_bytes = struct.pack(DiskPage.FMT_PAGE_TO_BYTES,
                                   disk_page._data,
                                   disk_page._id,
