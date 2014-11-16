@@ -35,21 +35,13 @@ class TestDiskSpaceManager(TestCase):
         self.assertFalse(os.path.exists(self.test_database_filename))
 
     def test_open_file(self):
+        filename = 'temp-db.db'
+        dsm = DiskSpaceManager(filename)
         # An indirect way to check if the file is opened
         with self.assertRaises(OSError):
             self.dsm.open_file()
             self.dsm.delete_file()  # raise exception because it is open
         self.dsm.close_file()
-
-    def test_close_file(self):
-        # The file is not open, it should raise an exception
-        with self.assertRaises(OSError):
-            self.dsm.close_file()
-
-        # An indirect way to check if the file is closed
-        self.dsm.open_file()
-        self.dsm.close_file()
-        self.dsm.delete_file()
 
     @extra_setup_teardown
     def test_get_free_and_release_pages(self):
@@ -99,12 +91,3 @@ class TestDiskSpaceManager(TestCase):
         for i in range(self.num_pages):
             disk_page = self.dsm.read_page(i)
             self.assertEqual(i, disk_page.id)
-
-    @extra_setup_teardown
-    def test_size(self):
-        size = self.num_pages*DiskPage.PAGE_SIZE
-        self.assertEqual(size, self.dsm.size)
-
-    @extra_setup_teardown
-    def test_num_pages(self):
-        self.assertEqual(self.num_pages, self.dsm.num_pages)
