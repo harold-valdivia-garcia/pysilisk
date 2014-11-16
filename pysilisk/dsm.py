@@ -107,7 +107,59 @@ class DiskSpaceManager(object):
         pass
 
     def release_page(self, page_id):
-        pass
+        # before release page:
+        #     page   --> another_page
+        #     header --> first_free
+        #
+        # step 1:
+        #          page
+        #              ¯¯¯¯v
+        #     header --> first_free
+        #
+        # step 2:
+        #     header --> page --> first_free
+
+        if page_id < 0 or page_id >= self._num_pages:
+            msg = 'Page-id %s is outside of the db space.' % page_id
+            raise ValueError(msg)
+
+        # Easiest-approach:
+        # ---------------
+        #    # Get the first-free-page
+        #    header = self.read_page(0)
+        #    first_free_id = header.next_page_pointer
+        #
+        #    # page --> first_free
+        #    page = self.read_page(page_id)
+        #    page.next_page_pointer = first_free_id
+        #    self.write_page(page)
+        #
+        #    # header --> page
+        #    header.next_page_pointer = page_id
+        #    self.write_page(header)
+
+        # The following code avoids the overhead caused by
+        # read_page and write_page (ifs and the offset calculations).
+
+        # Get the first-free-page
+        self._dbfile.seek(0)
+        array_bytes = self._dbfile.read(DiskPage.PAGE_SIZE)
+        header = DiskPage.from_bytes(array_bytes)
+        first_free_id = header.next_page_pointer
+
+        # page --> first-free
+        offset_page = page_id*DiskPage.PAGE_SIZE
+        self._dbfile.seek(offset_page)
+        array_bytes = self._dbfile.read(DiskPage.PAGE_SIZE)
+        page = DiskPage.from_bytes(array_bytes)
+        page.next_page_pointer = first_free_id
+        self._dbfile.seek(offset_page)
+        self._dbfile.write(DiskPage.to_bytes(page))
+
+        # header --> page
+        header.next_page_pointer = page_id
+        self._dbfile.seek(0)
+        self._dbfile.write(DiskPage.to_bytes(header))
 
     def write_page(self, disk_page):
         if disk_page.id < 0 or disk_page.id >= self._num_pages:
