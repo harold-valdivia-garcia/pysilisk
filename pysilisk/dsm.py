@@ -69,6 +69,7 @@ class DiskSpaceManager(object):
         self._is_opened = False
         self._dbfile = io.BytesIO()  # dummy file to avoid from checking
         self._dbfile.close()         # _dbfile == None everytime
+        self._num_pages = 0
 
     def create_file(self, num_pages):
         """Creates a file (database space) with 'num_pages' pages.
@@ -86,6 +87,7 @@ class DiskSpaceManager(object):
                 if i < num_pages - 1:
                     disk_page.next_page_pointer = i+1
                 f.write(DiskPage.to_bytes(disk_page))
+            self._num_pages = num_pages
 
     def delete_file(self):
         self.close_file()
@@ -94,17 +96,56 @@ class DiskSpaceManager(object):
         os.remove(self.filename)
 
     def open_file(self):
-        if not self._dbfile.closed:
+        if self._dbfile.closed:
             if not os.path.exists(self.filename):
                 raise OSError('File %s  does not exist.' % self.filename)
-            self._dbfile = open(self.filename, 'wb')
+            self._dbfile = open(self.filename, 'r+b')
             self._size = os.path.getsize(self.filename)
 
     def close_file(self):
         self._dbfile.close()
 
     def get_free_page(self):
-        pass
+        # Get the first-free-page
+        self._dbfile.seek(0)
+        array_bytes = self._dbfile.read(DiskPage.PAGE_SIZE)
+        header = DiskPage.from_bytes(array_bytes)
+        first_free_id = header.next_page_pointer
+
+        if first_free_id == -1:
+            # Get num-pages of the file
+            file_num_pages = self._num_pages
+
+            # Create 20 new pages
+            new_num_pages = 20
+            self._dbfile.seek(0, whence=2)  # Seek to the file's end
+            for i in range(file_num_pages, file_num_pages + new_num_pages):
+                disk_page = DiskPage(i)
+                if i < file_num_pages + new_num_pages - 1:
+                    disk_page.next_page_pointer = i + 1
+                self._dbfile.write(DiskPage.to_bytes(disk_page))
+
+            # update the size of the file
+            self._size += new_num_pages * DiskPage.PAGE_SIZE
+            self._num_pages = self._size/DiskPage.PAGE_SIZE
+
+            # Set the first-new-page as the first-free-age
+            first_free_id = file_num_pages
+
+        # Get the first-page's next-page
+        offset_first_free = first_free_id*DiskPage.PAGE_SIZE
+        self._dbfile.seek(offset_first_free)
+        array_bytes = self._dbfile.read(DiskPage.PAGE_SIZE)
+        fields = struct.unpack(DiskPage.FMT_PACK_UNPACK_PAGE, array_bytes)
+        p_data, p_id, nextpage_of_firstfree = fields
+
+        # next-page of first-free will be the new first-free in the header
+        header.next_page_pointer = nextpage_of_firstfree
+        self._dbfile.seek(0)
+        self._dbfile.write(DiskPage.to_bytes(header))
+
+        # Return the clean free-page
+        return DiskPage(first_free_id)
 
     def release_page(self, page_id):
         # before release page:
@@ -165,6 +206,7 @@ class DiskSpaceManager(object):
         if disk_page.id < 0 or disk_page.id >= self._num_pages:
             msg = 'Page-id %s is outside of the db space.' % disk_page.id
             raise ValueError(msg)
+        self._dbfile.seek(disk_page.id * DiskPage.PAGE_SIZE)
         self._dbfile.write(DiskPage.to_bytes(disk_page))
 
     def read_page(self, page_id):
