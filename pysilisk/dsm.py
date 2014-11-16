@@ -1,5 +1,5 @@
 import struct
-
+import os
 
 class DiskPage(object):
     """ """
@@ -64,13 +64,26 @@ class DiskPage(object):
 
 class DiskSpaceManager(object):
     def __init__(self, filename):
-        pass
+        self.filename = filename
+        self._is_opened = False
+        self._dbfile = None
 
     def create_file(self, num_pages):
         """Creates a file (database space) with 'num_pages' pages.
         num_pages - it should be at least 2.
         """
-        pass
+        if num_pages < 2:
+            raise ValueError('Num-pages must be greater than or equal to two')
+        if os.path.exists(self.filename):
+            raise OSError('The filename %s already exists' % self.filename)
+
+        # Create a sequence of connected disk-pages
+        with open(self.filename, 'wb') as f:
+            for i in range(num_pages):
+                disk_page = DiskPage(i)
+                if i < num_pages - 1:
+                    disk_page.next_page_pointer = i+1
+                f.write(DiskPage.to_bytes(disk_page))
 
     def delete_file(self):
         pass
