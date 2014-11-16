@@ -88,13 +88,20 @@ class DiskSpaceManager(object):
                 f.write(DiskPage.to_bytes(disk_page))
 
     def delete_file(self):
-        pass
+        self.close_file()
+        if not os.path.exists(self.filename):
+            raise OSError('Could not delete the db space.')
+        os.remove(self.filename)
 
     def open_file(self):
-        pass
+        if not self._dbfile.closed:
+            if not os.path.exists(self.filename):
+                raise OSError('File %s  does not exist.' % self.filename)
+            self._dbfile = open(self.filename, 'wb')
+            self._size = os.path.getsize(self.filename)
 
     def close_file(self):
-        pass
+        self._dbfile.close()
 
     def get_free_page(self):
         pass
