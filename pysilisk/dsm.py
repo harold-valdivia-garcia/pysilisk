@@ -1,5 +1,6 @@
 import struct
 import os
+import io
 
 class DiskPage(object):
     """ """
@@ -66,7 +67,8 @@ class DiskSpaceManager(object):
     def __init__(self, filename):
         self.filename = filename
         self._is_opened = False
-        self._dbfile = None
+        self._dbfile = io.BytesIO()  # dummy file to avoid from checking
+        self._dbfile.close()         # _dbfile == None everytime
 
     def create_file(self, num_pages):
         """Creates a file (database space) with 'num_pages' pages.
@@ -101,16 +103,20 @@ class DiskSpaceManager(object):
         pass
 
     def write_page(self, disk_page):
-        pass
+        if disk_page.id < 0 or disk_page.id >= self._num_pages:
+            msg = 'Page-id %s is outside of the db space.' % disk_page.id
+            raise ValueError(msg)
+        self._dbfile.write(DiskPage.to_bytes(disk_page))
 
     def read_page(self, page_id):
-        pass
+        if page_id < 0 or page_id >= self._num_pages:
+            msg = 'Page-id %s is outside of the db space.' % page_id
+            raise ValueError(msg)
 
-    @property
-    def size(self):
-        pass
+        # Read the page from disk
+        self._dbfile.seek(page_id*DiskPage.PAGE_SIZE)
+        array_bytes = self._dbfile.read(DiskPage.PAGE_SIZE)
+        return DiskPage.from_bytes(array_bytes)
 
-    @property
-    def num_pages(self):
-        pass
+
 
