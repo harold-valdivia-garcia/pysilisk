@@ -55,7 +55,7 @@ class DiskPage(object):
     @staticmethod
     def to_bytes(disk_page):
         # Pack the disk_page as bytes
-        array_bytes = struct.pack(DiskPage.FMT_PAGE_TO_BYTES,
+        array_bytes = struct.pack(DiskPage.FMT_PACK_UNPACK_PAGE,
                                   disk_page._data,
                                   disk_page._id,
                                   disk_page.next_page_pointer)
