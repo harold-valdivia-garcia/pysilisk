@@ -14,7 +14,6 @@ class DateTime(datetime):
         dt = DateTime.from_timestamp(f)
     """
 
-    @property
     def to_timestamp(self):
         return self._timestamp
 
