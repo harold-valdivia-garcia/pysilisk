@@ -1,11 +1,5 @@
 from unittest import TestCase
 from pysilisk.types import DateTime
-from datetime import datetime
-import time
-import os
-import struct
-import io
-
 import math
 
 

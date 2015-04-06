@@ -38,7 +38,6 @@ class Date(date):
         dt = Date.from_int4(f)
     """
 
-    @property
     def to_int4(self):
         return self.day + self.month*100 + self.year*10000
 
