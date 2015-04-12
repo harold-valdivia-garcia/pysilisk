@@ -9,8 +9,8 @@ from pyparsing import Optional, delimitedList, Regex
 # http://stackoverflow.com/questions/16909380/sql-parsing-using-pyparsing
 
 # Define keywords
-(SELECT, FROM, WHERE, AS) = map(CaselessKeyword, """SELECT, FROM,
- WHERE, AS""".replace(",","").split())
+(SELECT, FROM, WHERE, AS, NULL) = map(CaselessKeyword, """SELECT, FROM,
+ WHERE, AS, NULL""".replace(",","").split())
 
 
 # Define and remove dot from the outputs
@@ -47,6 +47,8 @@ num_dot = Literal(".")
 real_number_literal = Regex(r"[+-]?([1-9][0-9]*|0)\.[0-9]+")
 numeric_literal = real_number_literal | integer_literal
 string_literal = QuotedString("'")
+literal_value = (numeric_literal|string_literal|NULL)
+
 
 # Select-Statement
 selectStmt = SELECT + column_name + from_clause.setResultsName("from_clause")
