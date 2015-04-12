@@ -1,6 +1,6 @@
-from pyparsing import Word, Literal, Group
+from pyparsing import Word, Literal, Group, QuotedString
 from pyparsing import alphas, alphanums, CaselessKeyword
-from pyparsing import Optional, delimitedList
+from pyparsing import Optional, delimitedList, Regex
 
 # This code is based on:
 # http://pyparsing.wikispaces.com/file/view/simpleSQL.py
@@ -38,6 +38,15 @@ from_table = from_table.setResultsName("from_table")
 from_tables = delimitedList(from_table)  # tbl1 as t, tbl2 as b,...
 from_tables = from_tables.setResultsName("from_tables")
 from_clause = Group(FROM + from_tables).setResultsName("from_clause")
+
+# Literal Values
+nonzero_digits = Word('123456789')
+integer_literal = Regex(r"[+-]?([1-9][0-9]*|0)")
+Literal(".")
+num_dot = Literal(".")
+real_number_literal = Regex(r"[+-]?([1-9][0-9]*|0)\.[0-9]+")
+numeric_literal = real_number_literal | integer_literal
+string_literal = QuotedString("'")
 
 # Select-Statement
 selectStmt = SELECT + column_name + from_clause.setResultsName("from_clause")
