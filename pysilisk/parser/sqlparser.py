@@ -9,10 +9,12 @@ from pyparsing import Optional, delimitedList, Regex, Empty, OneOrMore
 # http://stackoverflow.com/questions/16909380/sql-parsing-using-pyparsing
 
 # Define keywords
-(SELECT, FROM, WHERE, AS, NULL) = map(CaselessKeyword, """SELECT, FROM,
- WHERE, AS, NULL""".replace(",","").split())
+(SELECT, FROM, WHERE, AS, NULL, NOT,
+ AND, OR) = map(CaselessKeyword, """SELECT, FROM,
+ WHERE, AS, NULL, NOT, AND, OR""".replace(",","").split())
 #
-keywords = (SELECT|FROM|WHERE|AS|NULL)
+
+keywords = (SELECT|FROM|WHERE|AS|NULL|NOT|AND|OR)
 
 # Define and remove dot from the outputs
 LPAR,RPAR = map(Suppress, '()')
@@ -55,26 +57,24 @@ literal_value = literal_value.setName('literal_value')
 # Arithmetic expression:
 # We use the following grammar as a basis:
 #
-#   arithExp   =  term adOp arithExp' | term
-#   term       =  factor multOp term | factor
-#   factor     =  literal | funct | colname | '('arithExp')'
-#   funct      =  functName '('functArgs')'
-#   functArgs  =  [ arithExp [',' arithExp]* ]*
+#      <b-expression> ::= <b-term> [<orop> <b-term>]*
+#      <b-term>       ::= <not-factor> [AND <not-factor>]*
+#      <not-factor>   ::= [NOT] <b-factor>
+#      <b-factor>     ::= <b-literal> | <b-variable> | <relation>
+#      <relation>     ::= | <expression> [<relop> <expression]
+#      <expression>   ::= <term> [<addop> <term>]*
+#      <term>         ::= <signed factor> [<mulop> factor]*
+#      <signed factor>::= [<addop>] <factor>
+#      <factor>       ::= <integer> | <variable> | (<b-expression>)
 #
-# Then, we remove the left-recursion since pyparsing does not support it:
-#
-#   arithExp   =  term arithExp' | term
-#   arithExp'  =  addOp term arithExp' | null
-#   term       =  factor term'
-#   term'      =  multOp factor term' | null
-#   factor     =  literal | funct | colname | '('arithExp')'
-#   funct      =  functName '('functArgs')'
-#   functArgs  =  [ arithExp [',' arithExp]* ]*
-#
+# Note: Writing a perfect grammar for the boolean and arithmetic expressions
+#       are beyond the scope of this project. I followed a simple approach
+#       following the suggestions of Crenshaw [1].
 # References:
+# [1] http://compilers.iecc.com/crenshaw/tutor6.txt
 # http://en.wikipedia.org/wiki/Syntax_diagram
-# http://matt.might.net/articles/grammars-bnf-ebnf/
 # https://pyparsing.wikispaces.com/file/view/fourFn.py
+# http://matt.might.net/articles/grammars-bnf-ebnf/
 
 # Arith-Operators
 add_op = Literal("+")
@@ -85,28 +85,50 @@ mod_op = Literal("%")
 add_sub_op = (add_op | sub_op).setResultsName('operator')
 mult_div_mod_op = (mult_op | div_op | mod_op).setResultsName('operator')
 
-# Arith-expression
+# Relational-Operators
+equal_op = Literal("=")
+diff_op = Literal("<>")
+less_op = Literal("<")
+greater_op  = Literal(">")
+less_than_op = Literal("<=")
+greater_then_op = Literal(">=")
+
+# expression-nodes
 arith_expr = Forward()
 term = Forward()
 factor = Forward()
+signed_factor = Forward()
 arith_expr_ = Forward()
 term_ = Forward()
+bool_factor = Forward()
+bool_expr = Forward()
+bool_term = Forward()
 
 # Define a function:
 funct_name = identifier.copy()
 funct_args = Group(Optional(delimitedList(arith_expr)))
 funct_call = Group(funct_name + LPAR + funct_args + RPAR).setResultsName('function')
-factor = (literal_value.setResultsName('value')|funct_call|
-          column_name.setResultsName('column')|Group(LPAR + arith_expr + RPAR))
-term_ <<  Optional(mult_div_mod_op + factor + term_)
-term << Group(factor + term_)
-arith_expr_ << Optional(add_sub_op + term + arith_expr_)
-arith_expr << (term + arith_expr_)
+
+# Define arith-expression
+factor << (literal_value|funct_call|column_name|Group(LPAR + bool_expr + RPAR))
+signed_factor << Optional(add_sub_op) + factor
+term << Group(signed_factor + ZeroOrMore(mult_div_mod_op + factor))
+arith_expr << term + ZeroOrMore(add_sub_op + term)
+
+# Define a relation
+#     <relation>  ::= <expression> <rel-op> <expression>
+#     <rel-op>    ::= =|<> | < | >| <= |  >=
+relation_op = diff_op|greater_then_op|less_than_op|greater_op|less_op|equal_op
+relation = Group(arith_expr) + ZeroOrMore(relation_op + Group(arith_expr))
+
+# Define boolean-expression
+bool_factor << relation
+bool_term << Optional(NOT) + bool_factor + ZeroOrMore(AND + Optional(NOT) + bool_factor)
+bool_expr << Group(bool_term) + ZeroOrMore(OR + Group(bool_term))
 
 # Where Clause
-where_clause = Group(WHERE + arith_expr.setResultsName('expression')).setResultsName("where_clause")
+where_clause = Group(WHERE + bool_expr).setResultsName("where_clause")
 
 # Select Statement
 projected_attributes = OneOrMore(arith_expr).setResultsName('projected_attributes')
 selectStmt = SELECT +  projected_attributes + from_clause.setResultsName("from_clause") + Optional(where_clause)
-
