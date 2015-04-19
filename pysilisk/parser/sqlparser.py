@@ -9,12 +9,13 @@ from pyparsing import Optional, delimitedList, Regex, Empty, OneOrMore
 # http://stackoverflow.com/questions/16909380/sql-parsing-using-pyparsing
 
 # Define keywords
-(SELECT, FROM, WHERE, AS, NULL, NOT,
- AND, OR) = map(CaselessKeyword, """SELECT, FROM,
- WHERE, AS, NULL, NOT, AND, OR""".replace(",","").split())
-#
+(SELECT, FROM, WHERE, AS, NULL, NOT,AND, OR, DISTINCT, ALL, INSERT, INTO,
+ VALUES, DELETE, UPDATE, SET) = map(CaselessKeyword, """SELECT, FROM, WHERE, AS,
+ NULL, NOT, AND, OR, DISTINCT, ALL, INSERT, INTO, VALUES, DELETE, UPDATE,
+ SET""".replace(",","").split())
 
-keywords = (SELECT|FROM|WHERE|AS|NULL|NOT|AND|OR)
+keywords = (SELECT|FROM|WHERE|AS|NULL|NOT|AND|OR|DISTINCT|ALL|INSERT|INTO|
+            VALUES|DELETE|UPDATE|SET)
 
 # Define and remove dot from the outputs
 LPAR,RPAR = map(Suppress, '()')
@@ -68,13 +69,13 @@ literal_value = literal_value.setName('literal_value')
 #      <factor>       ::= <integer> | <variable> | (<b-expression>)
 #
 # Note: Writing a perfect grammar for the boolean and arithmetic expressions
-#       are beyond the scope of this project. I followed a simple approach
-#       following the suggestions of Crenshaw [1].
+#       are beyond the scope of this project. I followed the approach suggested
+#       by Crenshaw [1].
 # References:
 # [1] http://compilers.iecc.com/crenshaw/tutor6.txt
-# http://en.wikipedia.org/wiki/Syntax_diagram
-# https://pyparsing.wikispaces.com/file/view/fourFn.py
-# http://matt.might.net/articles/grammars-bnf-ebnf/
+# [2] http://en.wikipedia.org/wiki/Syntax_diagram
+# [3] https://pyparsing.wikispaces.com/file/view/fourFn.py
+# [4] http://matt.might.net/articles/grammars-bnf-ebnf/
 
 # Arith-Operators
 add_op = Literal("+")
@@ -130,5 +131,33 @@ bool_expr << Group(bool_term) + ZeroOrMore(OR + Group(bool_term))
 where_clause = Group(WHERE + bool_expr).setResultsName("where_clause")
 
 # Select Statement
-projected_attributes = OneOrMore(arith_expr).setResultsName('projected_attributes')
-selectStmt = SELECT +  projected_attributes + from_clause.setResultsName("from_clause") + Optional(where_clause)
+star = Literal("*")
+attribute = star|Group(arith_expr + Optional(AS+alias))
+projected_attrs = delimitedList(attribute)
+projected_attrs = projected_attrs.setResultsName("projected_attributes")
+selectStmt = (SELECT + Optional(DISTINCT|ALL) + projected_attrs +
+              from_clause  +
+              Optional(where_clause))
+
+# Insert statement
+# Contrary to standard SQL, our implementation of the Insert-Statement does not
+# consider the list-of-columns. To reduce the complexity of the execution of an
+# Insert-Stmt, pysilik supports only literals (not arith-expression) in the list
+# of values.
+#
+# <insert> := INSERT INTO <table> VALUES(literal [, literal]*)
+insertStmt = (INSERT + INTO + table_name + VALUES +
+              LPAR +
+              delimitedList(literal_value).setResultsName('list_values') +
+              RPAR)
+
+# Delete Statement
+deleteStmt = (DELETE + FROM +table_name + Optional(where_clause))
+
+# Update Statement
+# Similar to the insert-stmt, pysilik only supports literal as values
+column_and_value = Group(simple_column_name + equal_op + literal_value)
+set_col_values = delimitedList(column_and_value)
+updateStmt = (UPDATE + table_name +
+              SET + set_col_values.setResultsName('list_columns_and_values') +
+              Optional(where_clause))
