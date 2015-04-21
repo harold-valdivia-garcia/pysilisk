@@ -10,12 +10,16 @@ from pyparsing import Optional, delimitedList, Regex, Empty, OneOrMore
 
 # Define keywords
 (SELECT, FROM, WHERE, AS, NULL, NOT,AND, OR, DISTINCT, ALL, INSERT, INTO,
- VALUES, DELETE, UPDATE, SET) = map(CaselessKeyword, """SELECT, FROM, WHERE, AS,
+ VALUES, DELETE, UPDATE, SET, CREATE, INDEX, USING, BTREE, HASH, ON,
+ INTEGER, FLOAT, DATETIME, DATE, VARCHAR, CHAR, TABLE) = map(CaselessKeyword, """SELECT, FROM, WHERE, AS,
  NULL, NOT, AND, OR, DISTINCT, ALL, INSERT, INTO, VALUES, DELETE, UPDATE,
- SET""".replace(",","").split())
+ SET, CREATE, INDEX, USING, BTREE, HASH, ON, INTEGER, FLOAT, DATETIME,
+ DATE, VARCHAR, CHAR, TABLE""".replace(",","").split())
 
+NOT_NULL = 'NOT NULL'
 keywords = (SELECT|FROM|WHERE|AS|NULL|NOT|AND|OR|DISTINCT|ALL|INSERT|INTO|
-            VALUES|DELETE|UPDATE|SET)
+            VALUES|DELETE|UPDATE|SET|CREATE|INDEX|USING|BTREE|HASH|ON|
+            INTEGER|FLOAT|DATETIME|DATE|VARCHAR|CHAR|TABLE|NOT_NULL)
 
 # Define and remove dot from the outputs
 LPAR,RPAR = map(Suppress, '()')
@@ -54,6 +58,17 @@ numeric_literal = real_number_literal | integer_literal
 string_literal = QuotedString("'")
 literal_value = (numeric_literal|string_literal|NULL)
 literal_value = literal_value.setName('literal_value')
+
+# Data-types
+INTEGER_TYPE = INTEGER
+FLOAT_TYPE = FLOAT
+DATETIME_TYPE = DATETIME
+DATE_TYPE = DATE
+string_size = integer_literal.setResultsName('size')
+VARCHAR_TYPE = Group(VARCHAR + LPAR + string_size + RPAR)
+CHAR_TYPE = Group(CHAR + LPAR + string_size + RPAR)
+data_type = (INTEGER_TYPE|FLOAT_TYPE|DATETIME_TYPE|
+             DATE_TYPE|VARCHAR_TYPE|CHAR_TYPE).setResultsName('data_type')
 
 # Arithmetic expression:
 # We use the following grammar as a basis:
@@ -161,3 +176,40 @@ set_col_values = delimitedList(column_and_value)
 updateStmt = (UPDATE + table_name +
               SET + set_col_values.setResultsName('list_columns_and_values') +
               Optional(where_clause))
+
+# Create-Index Statement
+# <create-index> := CREATE INDEX <index-name>
+#                   ON <table-name> (list-columns)
+#                   USING {BTREE|HASH}
+index_name = identifier.setResultsName('index_name')
+index_type = (BTREE|HASH).setResultsName('index_type')
+index_columns =  (LPAR +
+                  delimitedList(simple_column_name) +
+                  RPAR)
+index_columns = index_columns.setResultsName('list_index_columns')
+create_index_stmt = (CREATE + INDEX + index_name + ON + simple_table_name +
+                     index_columns +
+                     USING + index_type)
+
+# Create-Table Statement
+# <create-table> := CREATE TABLE <table-name> (
+#                       <column-definitions>
+#                       [, <column-definitions>]*
+#                       [, INDEX (<list-columns>) USING <index-type>]
+#                   )
+#  <column-def>  := <column> <data_type> + Optional(NULL|NOT_NULL)
+
+#NOT_NULL = Group(NOT + NULL)
+null_constrain = (Group(NOT+NULL)| NULL).setResultsName('null_constrain')
+column_definition = (simple_column_name +
+                     data_type +
+                     Optional(null_constrain))
+
+list_col_defs  = delimitedList(Group(column_definition))
+# INDEX (list-columns) USING {btree|hash}
+index_definition = INDEX +  index_columns + USING + index_type
+create_table_stmt = (CREATE + TABLE + table_name + LPAR +
+                     list_col_defs.setResultsName('list_column_defs') +
+                     Optional(comma + index_definition) +
+                     RPAR)
+
