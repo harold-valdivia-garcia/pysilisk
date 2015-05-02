@@ -202,7 +202,7 @@ create_index_stmt = (CREATE + INDEX + index_name + ON + simple_table_name +
 #                       [, <column-definitions>]*
 #                       [, INDEX (<list-columns>) USING <index-type>]
 #                   )
-#  <column-def>  := <column> <data_type> + Optional(NULL|NOT_NULL)
+# <column-def>  := <column> <data_type> + Optional(NULL|NOT_NULL)
 null_constrain = (Group(NOT+NULL)| NULL).setResultsName('null_constrain')
 column_definition = (simple_column_name +
                      data_type +
