@@ -74,16 +74,16 @@ simple_column_name = identifier.setResultsName("column_name")
 fully_qualified_column_name = Group(simple_table_name + dot + simple_column_name)
 column_name = fully_qualified_column_name | simple_column_name
 
-# Arithmetic expression:
+# Boolean and Arithmetic expression:
 # We use the following grammar as a basis:
 #
 #      <b-expression> ::= <b-term> [<orop> <b-term>]*
 #      <b-term>       ::= <not-factor> [AND <not-factor>]*
 #      <not-factor>   ::= [NOT] <b-factor>
-#      <b-factor>     ::= <b-literal> | <b-variable> | <relation>
-#      <relation>     ::= | <expression> [<relop> <expression]
-#      <expression>   ::= <term> [<addop> <term>]*
-#      <term>         ::= <signed factor> [<mulop> factor]*
+#      <b-factor>     ::= <b-literal> | <b-variable> | <predicate>
+#      <predicate>     ::= | <expression> [<pred-op> <expression]
+#      <expression>   ::= <term> [<add-op> <term>]*
+#      <term>         ::= <signed factor> [<mult-op> factor]*
 #      <signed factor>::= [<addop>] <factor>
 #      <factor>       ::= <integer> | <variable> | (<b-expression>)
 #
@@ -105,7 +105,7 @@ mod_op = Literal("%")
 add_sub_op = (add_op | sub_op).setResultsName('operator')
 mult_div_mod_op = (mult_op | div_op | mod_op).setResultsName('operator')
 
-# Relational-Operators
+# Predicate Operators (a.k.a Relational-Operators or Comparison-Operators)
 equal_op = Literal("=")
 diff_op = Literal("<>")
 less_op = Literal("<")
@@ -135,14 +135,14 @@ signed_factor << Optional(add_sub_op) + factor
 term << Group(signed_factor + ZeroOrMore(mult_div_mod_op + factor))
 arith_expr << term + ZeroOrMore(add_sub_op + term)
 
-# Define a relation
-#     <relation>  ::= <expression> <rel-op> <expression>
-#     <rel-op>    ::= =|<> | < | >| <= |  >=
-relation_op = diff_op|greater_then_op|less_than_op|greater_op|less_op|equal_op
-relation = Group(arith_expr) + ZeroOrMore(relation_op + Group(arith_expr))
+# Define a predicate
+#     <predicate>  ::= <arith-expression> <pred-op> <arith-expression>
+#     <pred-op>    ::= =|<> | < | >| <= |  >=
+predicate_op = diff_op|greater_then_op|less_than_op|greater_op|less_op|equal_op
+predicate = Group(arith_expr) + Optional(predicate_op + Group(arith_expr))
 
 # Define boolean-expression
-bool_factor << relation
+bool_factor << predicate
 bool_term << Optional(NOT) + bool_factor + ZeroOrMore(AND + Optional(NOT) + bool_factor)
 bool_expr << Group(bool_term) + ZeroOrMore(OR + Group(bool_term))
 
@@ -222,13 +222,12 @@ create_table_stmt = (CREATE + TABLE + table_name + LPAR +
                      RPAR)
 
 # Drop table statement
-# Only one table at a time
 drop_table_stmt = DROP + TABLE + table_name
 
-
+# Drop index statement
 drop_index_stmt = DROP + INDEX  + index_name + ON + table_name
 
-# SQL =
+# SQL Statement
 sql_stmt = (select_stmt.setResultsName('SELECT')|
             insert_stmt.setResultsName('INSERT')|
             delete_stmt.setResultsName('DELETE')|
