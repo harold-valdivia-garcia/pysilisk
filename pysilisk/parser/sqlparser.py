@@ -1,7 +1,6 @@
 from pyparsing import Word, Literal, Group, QuotedString, Suppress, Forward
 from pyparsing import alphas, alphanums, CaselessKeyword, ZeroOrMore
-from pyparsing import Optional, delimitedList, Regex, ParserElement
-
+from pyparsing import Optional, delimitedList, Regex
 
 # This code is based on:
 # http://pyparsing.wikispaces.com/file/view/simpleSQL.py
