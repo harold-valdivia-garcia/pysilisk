@@ -1,6 +1,7 @@
 from pyparsing import Word, Literal, Group, QuotedString, Suppress, Forward
 from pyparsing import alphas, alphanums, CaselessKeyword, ZeroOrMore
-from pyparsing import Optional, delimitedList, Regex
+from pyparsing import Optional, delimitedList, Regex, ParserElement
+
 
 # This code is based on:
 # http://pyparsing.wikispaces.com/file/view/simpleSQL.py
@@ -46,11 +47,18 @@ string_literal = QuotedString("'")
 literal_value = (numeric_literal|string_literal|NULL)
 literal_value = literal_value.setName('literal_value')
 
+# Type-names
+INTEGER = INTEGER.setResultsName('type_name')
+FLOAT = FLOAT.setResultsName('type_name')
+DATETIME = DATETIME.setResultsName('type_name')
+DATE = DATE.setResultsName('type_name')
+VARCHAR = VARCHAR.setResultsName('type_name')
+CHAR = CHAR.setResultsName('type_name')
 # Data-types
-integer_type = INTEGER
-float_type = FLOAT
-datetime_type = DATETIME
-date_type = DATE
+integer_type = Group(INTEGER)
+float_type = Group(FLOAT)
+datetime_type = Group(DATETIME)
+date_type = Group(DATE)
 string_size = integer_literal.setResultsName('size')
 nvarchar_type = Group(VARCHAR + LPAR + string_size + RPAR)
 nchar_type = Group(CHAR + LPAR + string_size + RPAR)
@@ -203,12 +211,12 @@ create_index_stmt = (CREATE + INDEX + index_name + ON + simple_table_name +
 #                       [, INDEX (<list-columns>) USING <index-type>]
 #                   )
 #  <column-def>  := <column> <data_type> + Optional(NULL|NOT_NULL)
-null_constrain = (Group(NOT+NULL)| NULL).setResultsName('null_constrain')
+null_constrain = (Group(NOT+NULL)|Group(NULL)).setResultsName('null_constrain')
 column_definition = (simple_column_name +
                      data_type +
                      Optional(null_constrain))
 list_col_defs  = delimitedList(Group(column_definition))
-index_definition = INDEX +  index_columns + USING + index_type
+index_definition = INDEX + ON + index_columns + USING + index_type
 create_table_stmt = (CREATE + TABLE + table_name + LPAR +
                      list_col_defs.setResultsName('list_column_defs') +
                      Optional(comma + index_definition) +
@@ -218,11 +226,18 @@ create_table_stmt = (CREATE + TABLE + table_name + LPAR +
 # Only one table at a time
 drop_table_stmt = DROP + TABLE + table_name
 
+
+drop_index_stmt = DROP + INDEX  + index_name + ON + table_name
+
 # SQL =
-sql_stmt = (create_database_stmt|drop_db_stmt|
-            select_stmt|insert_stmt|delete_stmt|
-            update_stmt|create_index_stmt|
-            create_table_stmt|drop_table_stmt) + semi_colon
+sql_stmt = (select_stmt.setResultsName('SELECT')|
+            insert_stmt.setResultsName('INSERT')|
+            delete_stmt.setResultsName('DELETE')|
+            update_stmt.setResultsName('UPDATE')|
+            create_index_stmt.setResultsName('CREATE_INDEX')|
+            create_table_stmt.setResultsName('CREATE_TABLE')|
+            drop_table_stmt.setResultsName('DROP_TABLE')|
+            drop_index_stmt.setResultsName('DROP_INDEX')) + semi_colon
 
 # The following commands will not be implemented in the parser
 # but in the console
