@@ -37,14 +37,17 @@ drop_db_stmt = DROP + DATABASE + database_name
 
 # Literal Values
 nonzero_digits = Word('123456789')
+
 integer_literal = Regex(r"([+-]?[1-9][0-9]*|0)")
-Literal(".")
-num_dot = Literal(".")
-real_number_literal = Regex(r"([+-]?[1-9][0-9]*|0)\.[0-9]+")
-numeric_literal = real_number_literal | integer_literal
-string_literal = QuotedString("'")
+integer_literal = integer_literal.setResultsName('integer_literal')
+
+float_literal = Regex(r"([+-]?[1-9][0-9]*|0)\.[0-9]+")
+float_literal = float_literal.setResultsName('float_literal')
+
+numeric_literal = float_literal | integer_literal
+string_literal = QuotedString("'").setResultsName('string_literal')
+
 literal_value = (numeric_literal|string_literal|NULL)
-literal_value = literal_value.setName('literal_value')
 
 # Type-names
 INTEGER = INTEGER.setResultsName('type_name')
@@ -70,14 +73,15 @@ simple_table_name = identifier.setResultsName("table_name")
 table_name = simple_table_name.copy()
 
 # Column
-simple_column_name = identifier.setResultsName("column_name")
-fully_qualified_column_name = Group(simple_table_name + dot + simple_column_name)
-column_name = fully_qualified_column_name | simple_column_name
+column_name = identifier.setResultsName("column_name")
+fully_qualified_column_name = simple_table_name + dot + column_name
+column = Group(fully_qualified_column_name | column_name)
+column = column.setResultsName('column')
 
 # Boolean and Arithmetic expression:
 # We use the following grammar as a basis:
 #
-#      <b-expression> ::= <b-term> [<orop> <b-term>]*
+#      <b-expression> ::= <b-term> [OR <b-term>]*
 #      <b-term>       ::= <not-factor> [AND <not-factor>]*
 #      <not-factor>   ::= [NOT] <b-factor>
 #      <b-factor>     ::= <b-literal> | <b-variable> | <predicate>
@@ -104,6 +108,7 @@ div_op = Literal("/")
 mod_op = Literal("%")
 add_sub_op = (add_op | sub_op).setResultsName('operator')
 mult_div_mod_op = (mult_op | div_op | mod_op).setResultsName('operator')
+sign_op = add_sub_op.setResultsName('sign_op')
 
 # Predicate Operators (a.k.a Relational-Operators or Comparison-Operators)
 equal_op = Literal("=")
@@ -114,15 +119,13 @@ less_than_op = Literal("<=")
 greater_then_op = Literal(">=")
 
 # expression-nodes
-arith_expr = Forward()
-term = Forward()
-factor = Forward()
-signed_factor = Forward()
-arith_expr_ = Forward()
-term_ = Forward()
-bool_factor = Forward()
-bool_expr = Forward()
-bool_term = Forward()
+arith_expr = Forward().setResultsName('arith_expr')
+term = Forward().setResultsName('term')
+factor = Forward().setResultsName('factor')
+signed_factor = Forward().setResultsName('signed_factor')
+bool_factor = Forward().setResultsName('bool_factor')
+bool_expr = Forward().setResultsName('bool_expr')
+bool_term = Forward().setResultsName('bool_term')
 
 # Define a function:
 funct_name = identifier.copy()
@@ -130,21 +133,24 @@ funct_args = Group(Optional(delimitedList(arith_expr)))
 funct_call = Group(funct_name + LPAR + funct_args + RPAR).setResultsName('function')
 
 # Define arith-expression
-factor << (literal_value|funct_call|column_name|Group(LPAR + bool_expr + RPAR))
-signed_factor << Optional(add_sub_op) + factor
+factor << (Group(literal_value)|funct_call|column|Group(LPAR + bool_expr + RPAR))
+signed_factor << Group(Optional(sign_op) + factor)
 term << Group(signed_factor + ZeroOrMore(mult_div_mod_op + factor))
-arith_expr << term + ZeroOrMore(add_sub_op + term)
+arith_expr << Group(term + ZeroOrMore(add_sub_op + term))
 
 # Define a predicate
 #     <predicate>  ::= <arith-expression> <pred-op> <arith-expression>
 #     <pred-op>    ::= =|<> | < | >| <= |  >=
 predicate_op = diff_op|greater_then_op|less_than_op|greater_op|less_op|equal_op
-predicate = Group(arith_expr) + Optional(predicate_op + Group(arith_expr))
+predicate = Group(arith_expr + Optional(predicate_op + arith_expr))
+predicate = predicate.setResultsName('predicate')
 
 # Define boolean-expression
-bool_factor << predicate
-bool_term << Optional(NOT) + bool_factor + ZeroOrMore(AND + Optional(NOT) + bool_factor)
-bool_expr << Group(bool_term) + ZeroOrMore(OR + Group(bool_term))
+bool_factor << Group(Optional(NOT) + predicate)
+#bool_term << Optional(NOT) + bool_factor + ZeroOrMore(AND + Optional(NOT) + bool_factor)
+
+bool_term << Group(bool_factor + ZeroOrMore(AND  + bool_factor))
+bool_expr <<  Group(bool_term + ZeroOrMore(OR + bool_term))
 
 # Where Clause
 where_clause = Group(WHERE + bool_expr).setResultsName("where_clause")
@@ -183,7 +189,7 @@ delete_stmt = (DELETE + FROM +table_name + Optional(where_clause))
 
 # Update Statement
 # Similar to the insert-stmt, pysilik only supports literal as values
-column_and_value = Group(simple_column_name + equal_op + literal_value)
+column_and_value = Group(column_name + equal_op + literal_value)
 set_col_values = delimitedList(column_and_value)
 update_stmt = (UPDATE + table_name +
               SET + set_col_values.setResultsName('list_columns_and_values') +
@@ -196,7 +202,7 @@ update_stmt = (UPDATE + table_name +
 index_name = identifier.setResultsName('index_name')
 index_type = (BTREE|HASH).setResultsName('index_type')
 index_columns =  (LPAR +
-                  delimitedList(simple_column_name) +
+                  delimitedList(column_name) +
                   RPAR)
 index_columns = index_columns.setResultsName('list_index_columns')
 create_index_stmt = (CREATE + INDEX + index_name + ON + simple_table_name +
@@ -211,7 +217,7 @@ create_index_stmt = (CREATE + INDEX + index_name + ON + simple_table_name +
 #                   )
 #  <column-def>  := <column> <data_type> + Optional(NULL|NOT_NULL)
 null_constrain = (Group(NOT+NULL)|Group(NULL)).setResultsName('null_constrain')
-column_definition = (simple_column_name +
+column_definition = (column_name +
                      data_type +
                      Optional(null_constrain))
 list_col_defs  = delimitedList(Group(column_definition))
