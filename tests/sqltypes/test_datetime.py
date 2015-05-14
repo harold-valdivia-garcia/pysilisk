@@ -1,5 +1,5 @@
 from unittest import TestCase
-from pysilisk.types import DateTime
+from pysilisk.sqltypes import DateTime
 import math
 
 

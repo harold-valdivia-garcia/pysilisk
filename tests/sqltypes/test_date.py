@@ -1,5 +1,5 @@
 from unittest import TestCase
-from pysilisk.types import Date
+from pysilisk.sqltypes import Date
 
 
 class TestDate(TestCase):
