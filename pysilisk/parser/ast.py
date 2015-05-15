@@ -1,7 +1,8 @@
-from pysilisk.types import SQLDataType, NullConstrain
-from pysilisk.parser.sqlparser import sql_stmt
+import logging
+from pysilisk.sqltypes import SQLDataType, NullConstrain
+from pysilisk.parser.sqlparser import SQL_GRAMMAR
 
-# Inpired in the Berkeley COOL Project
+logger = logging.getLogger(__name__)
 
 
 class ComparisonOp(object):
@@ -83,7 +84,7 @@ class AST_StringLiteral(AST_Expression):
 # I've never used booleans in sql
 
 class AST_Column(AST_Expression):
-    def __init__(self, col_name, tbl_name=None):
+    def __init__(self, col_name, tbl_name=''):
         super().__init__(AST_Node.COLUMN)
         self.col_name = col_name
         self.tbl_name = tbl_name
@@ -116,7 +117,7 @@ class AST_AND(AST_BooleanExpr):
 
 
 class AST_OR(AST_BooleanExpr):
-    def __init__(self, left_expr, right_expr):
+    def __init__(self, left_expr=None, right_expr=None):
         super().__init__(AST_Node.OR, left_expr, right_expr)
 
 
@@ -242,13 +243,13 @@ class AST_Select(AST_Node):
 
 
 class AST_ColumnDefinition(AST_Node):
-    def __init__(self, column_name, type_name, type_size, nullable):
+    def __init__(self, column_name, type_name, type_size, null_identifier):
         super().__init__(AST_Node.COLUMN_DEFINITION)
         self.column_name = column_name
         self.type_name = type_name
         self.type_id = SQLDataType.from_string(type_name)
         self.type_size = type_size  # Only for varchar and char types
-        self.nullable = nullable
+        self.null_identifier = null_identifier
 
 
 class AST_CreateTable(AST_Node):
@@ -261,35 +262,47 @@ class AST_CreateTable(AST_Node):
 
 # Initial parse-implementation:
 def parse(sql_str):
-    result = sql_stmt.parseString(sql_str)
+    result = SQL_GRAMMAR.parseString(sql_str)
     stmt_type = result.getName()
+    logger.debug('Stmt-type: %s', stmt_type)
     if stmt_type == 'DROP_INDEX':
         index_name = result.index_name[0]
         table_name = result.table_name[0]
+        logger.debug('index: "%s"', index_name)
+        logger.debug('table: "%s"', table_name)
         return AST_DropIndex(index_name, table_name)
     elif stmt_type == 'DROP_TABLE':
         table_name = result.table_name[0]
+        logger.debug('table: "%s"', table_name)
         return AST_DropTable(table_name)
     elif stmt_type == 'CREATE_INDEX':
         idx_type = result.index_type
         idx_name = result.index_name[0]
         table_name = result.table_name[0]
         list_idx_columns = [c for c in result.list_index_columns]
+        logger.debug('index: "%s"', idx_name)
+        logger.debug('table: "%s"', table_name)
+        logger.debug('on-columns: "%s"', list_idx_columns)
+        logger.debug('indexType: "%s"', idx_type)
         return AST_CreateIndex(idx_name, table_name, list_idx_columns, idx_type)
     elif stmt_type == 'CREATE_TABLE':
         table_name = result.table_name[0]
+        logger.debug('table: "%s"', table_name)
+
         # Extract column-definitions
         ast_column_defs = []
         for definition in result.list_column_defs:
-            col_name = definition.column_name
-            type_name = definition.type_name
+            col_name = definition.column_name[0]
+            type_name = definition.data_type.type_name
             type_size = definition.data_type.size
             type_size = int(type_size) if type_size.isdigit() else -1
-            nullable = ' '.join(definition.null_constrain)
-            nullable = NullConstrain.from_string(nullable)
+            null_constrain = ' '.join(definition.null_constrain)
+            null_identifier = NullConstrain.from_string(null_constrain)
+            msg = "colName: %s, typeName: %s, typeSize: %s, nullIdentifier: %s"
+            logger.debug(msg, col_name, type_name, type_size, null_identifier)
             # Create and append an ast-definition
             ast_column_defs.append(
-                AST_ColumnDefinition(col_name, type_name, type_size, nullable)
+                AST_ColumnDefinition(col_name, type_name, type_size, null_identifier)
             )
         # Extract index information
         ast_idx = None
@@ -297,6 +310,105 @@ def parse(sql_str):
             idx_type = result.index_type
             idx_columns = [c for c in result.list_index_columns]
             idx_name = 'pk_%s' % table_name
+            logger.debug('index: "%s"', idx_name)
+            logger.debug('index-columns: "%s"', idx_columns)
+            logger.debug('indexType: "%s"', idx_type)
             ast_idx = AST_CreateIndex(idx_name, table_name, idx_columns, idx_type)
         return AST_CreateTable(table_name, ast_column_defs, ast_idx)
+
+
+def find_type(exp, deep=0, parent=''):
+    if deep > 100:
+        return None
+    _type = type(exp)
+    _len = len(exp)
+    str_deep = '  '*deep
+    print('%s len: %s  - type-exp: %s  -  exp: %s  - parent: %s' %(str_deep, _len, exp.getName(), exp,parent))
+
+    if 'column' in exp:
+        column = exp.column
+        table_name = ''
+        if len(column) == 2:
+            table_name = column.table_name[0]
+        column_name = column.column_name[0]
+        print("column-tbl-name: %s" % table_name)
+        print("column-col-name: %s " % column_name)
+        return AST_Column(column_name, table_name)
+    elif 'integer_literal' in exp:
+        integer_literal =  exp.integer_literal
+        print("integer-literal: %s" % integer_literal)
+        return AST_NumberLiteral(int(integer_literal))
+    elif 'float_literal' in exp:
+        float_literal =  exp.float_literal
+        print("float_literal: %s" % float_literal)
+        return AST_NumberLiteral(float(float_literal))
+    elif 'string_literal' in exp:
+        string_literal =  exp.string_literal
+        print("string_literal: %s" % string_literal)
+        return AST_StringLiteral(string_literal)
+    elif 'bool_expr' in exp:
+        bool_expr = exp.bool_expr[0]  # Because of the Group in bool_expr
+        if len(bool_expr) == 1:
+            return find_type(bool_expr, deep+1, 'bool_expr-len:1')
+        else:
+            # Given a boolean expression of ORs: [a, OR, b, OR, c]
+            # Create the following ast:
+            #        OR
+            #      /   \
+            #   OR      c
+            #  /  \
+            # a    b
+
+            first_exp = find_type(bool_expr[0], deep+1, 'bool_expr-len:%s'%len(bool_expr))
+            or_exp = AST_OR(left_expr=first_exp)
+            print('OR-right: %s' % str_deep, bool_expr[0])
+            for item in bool_expr[1:]:
+                if item != 'OR':
+                    ast_expr = find_type(item, deep+1, 'bool_expr-len:%s'%len(bool_expr))
+                    or_exp.right_expr = ast_expr
+                    new_or = AST_OR(left_expr=or_exp)
+                    or_exp = new_or
+                    print('OR-left: %s' % item)
+            return or_exp
+    elif 'bool_term' in exp:
+        bool_term = exp.bool_term[0]  # Because of the Group in bool_expr
+        if len(bool_term) == 1:
+            return find_type(bool_term, deep+1, 'bool_term-len:1')
+        else:
+            # Given a boolean expression of ORs: [a, OR, b, OR, c]
+            # Create the following ast:
+            #        OR
+            #      /   \
+            #   OR      c
+            #  /  \
+            # a    b
+
+            first_exp = find_type(bool_term[0], deep+1, 'bool_expr-len:%s'%len(bool_term))
+            and_exp = AST_AND(right_expr=first_exp)
+            print('AND-right: %s' % str_deep, bool_term[0])
+            for item in bool_term[1:]:
+                if item != 'AND':
+                    ast_expr = find_type(item, deep+1, 'bool_term-len:%s'%len(bool_term))
+                    or_exp.left_expr = ast_expr
+                    new_or = AST_AND(right_expr=or_exp)
+                    or_exp = new_or
+                    print('AND-left: %s' % item)
+            return or_exp
+    elif 'signed_factor' in exp:
+        sign = exp.signed_factor[0]
+        factor = exp.signed_factor[1]
+        ast_expr = find_type(factor,  deep+1, 'signed_factor')
+        print("signed-factor sign: %s" % sign)
+        if sign == '-':
+            return AST_NegArithExpr(ast_expr)
+        return ast_expr
+    elif 'term' in exp:
+        print("term-len: %s  - term: %s" %(len(exp.term), exp.term))
+        return AST_NegArithExpr(None)
+    else:
+        return find_type(exp[0], deep+1, 'unknown')
+
+
+
+
 
