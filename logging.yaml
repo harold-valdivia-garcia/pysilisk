@@ -1,0 +1,88 @@
+%YAML 1.2
+---
+# Logging Configuration
+#
+# Console-Handlers
+# ----------------
+# We define two handlers for the Console:
+#   console.handler          : Traditional handler of console
+#   colored.console.handler  : Handler that outputs colored messages
+#                              It depends on the package 'coloredlogs'
+#                              To install it use 'pip install colorlogs'
+#                              link: https://github.com/xolox/python-coloredlogs
+#
+# File-Handlers
+# -------------
+# We also define two File-handlers
+#   pysilisk.file.handler    : Save all log-messages into log/pysilisk.log
+#   submodule.file.handler   : It is used by logger 'pysilisk.submodule'
+#                              to isolate the logs of a specific module
+#
+# Loggers
+# -------
+# We main logger of PysiliskSQL is 'pysilisk'. We also use logger
+# 'pysilisk.submodule' to debug a particular module individually
+#
+
+version: 1
+disable_existing_loggers: True
+
+formatters:
+    logformat:
+        format: "\n%(levelname)s: %(name)s: %(message)s"
+
+handlers:
+    # Traditional console
+    console.handler:
+        class: logging.StreamHandler
+        level: DEBUG
+        stream: ext://sys.stderr
+        formatter: logformat
+
+    # Console-handler with color support
+    # If its show_* options are not disabled,
+    # then it will conflict with the format
+    colored.console.handler:
+        class: coloredlogs.ColoredStreamHandler
+        level: DEBUG
+        stream: ext://sys.stderr
+        formatter: logformat
+        show_name: False
+        show_severity: False
+        show_timestamps: False
+        show_hostname: False
+        use_chroot: False
+
+    # Main file handler of PysiliskSQL
+    # Each execution will clear previous logs (mode: w)
+    pysilisk.file.handler:
+        class: logging.FileHandler
+        level: DEBUG
+        filename: log/pysilisk.log
+        formatter: logformat
+        mode: w
+
+    submodule.file.handler:
+        class: logging.FileHandler
+        level: DEBUG
+        filename: log/pysilisk.submodule.log
+        formatter: logformat
+        mode: w
+
+loggers:
+    # Main logger of PysiliskSQL
+    pysilisk:
+        level: DEBUG
+        handlers: [colored.console.handler, pysilisk.file.handler]
+        propagate: no
+
+    # logger of a particular module
+    pysilisk.submodule:
+        level: DEBUG
+        handlers: [colored.console.handler, submodule.file.handler]
+        propagate: yes
+
+root:
+    level: DEBUG
+    handlers: [console.handler]
+...
