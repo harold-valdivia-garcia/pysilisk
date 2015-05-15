@@ -177,7 +177,7 @@ where_clause = Group(WHERE + bool_expr).setResultsName("where_clause")
 # Insert-Stmt, pysilik supports only literals (not arith-expression) in the list
 # of values.
 #      <insert> := INSERT INTO <table> VALUES(literal [, literal]*)
-insert_values = delimitedList(literal_value).setResultsName('list_values')
+insert_values = delimitedList(Group(literal_value)).setResultsName('insert_values')
 insert_stmt = INSERT + INTO + table_name + VALUES +LPAR + insert_values + RPAR
 
 # Delete Statement

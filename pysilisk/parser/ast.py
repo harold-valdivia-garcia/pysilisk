@@ -68,6 +68,10 @@ class AST_Expression(AST_Node):
     def __init__(self, ast_id):
         super().__init__(ast_id)
 
+class AST_Literal(AST_Expression):
+    def __init__(self, value, literal_type):
+        super().__init__(AST_Node.NUM_CONST)
+        self.value = value
 
 class AST_NumberLiteral(AST_Expression):
     def __init__(self, value):
@@ -180,9 +184,10 @@ class AST_DropTable(AST_Node):
 
 
 class AST_Insert(AST_Node):
-    def __init__(self, list_values):
+    def __init__(self, table_name, inserted_values):
         super().__init__(AST_Node.INSERT)
-        self.list_values = list_values
+        self.table_name = table_name
+        self.inserted_values = inserted_values
 
 
 class AST_Delete(AST_Node):
@@ -315,7 +320,21 @@ def parse(sql_str):
             logger.debug('indexType: "%s"', idx_type)
             ast_idx = AST_CreateIndex(idx_name, table_name, idx_columns, idx_type)
         return AST_CreateTable(table_name, ast_column_defs, ast_idx)
-
+    elif stmt_type == 'INSERT':
+        table_name = result.table_name[0]
+        logger.debug('table: "%s"', table_name)
+        ast_inserted_values = []
+        for literal in result.insert_values:
+            literal_value = literal[0]
+            literal_type = literal.getName()
+            ast_value = None
+            if literal_type in ['integer_literal', 'float_literal']:
+                ast_value = AST_NumberLiteral(float(literal_value))
+            elif literal_type == 'string_literal':
+                ast_value = AST_StringLiteral(literal_value)
+            ast_inserted_values.append(ast_value)
+            logger.debug('value: %s  -  type: %s', literal_value, literal_type)
+        return AST_Insert(table_name, ast_inserted_values)
 
 def find_type(exp, deep=0, parent=''):
     if deep > 100:
