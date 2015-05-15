@@ -16,7 +16,6 @@ class NullConstrain(object):
         elif str_constrain == 'NOT NULL':
             return cls.NOT_NULL
 
-
 class SQLDataType(object):
     """Identifiers and Names of the SQL Data-types supported by Pisilisk"""
     INTEGER = 0  # Integer of 4-bytes
@@ -50,6 +49,7 @@ class DataTypeException(Exception):
     def __init__(self, unsupported_data_type):
         self.unsupported_data_type = unsupported_data_type
         self.message = "Unsupported data-type: %s" % unsupported_data_type
+        super().__init__(self.message)
 
 
 class DateTime(datetime):
