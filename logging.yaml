@@ -4,12 +4,17 @@
 #
 # Console-Handlers
 # ----------------
-# We define two handlers for the Console:
+# We define three handlers for the Console:
 #   console.handler          : Traditional handler of console
+#
 #   colored.console.handler  : Handler that outputs colored messages
 #                              It depends on the package 'coloredlogs'
 #                              To install it use 'pip install colorlogs'
 #                              link: https://github.com/xolox/python-coloredlogs
+#
+#   colorlog.console.handler : Another handler to coloring the messages.
+#                              It uses the ColoredFormatter for the colors.
+#
 #
 # File-Handlers
 # -------------
@@ -17,6 +22,15 @@
 #   pysilisk.file.handler    : Save all log-messages into log/pysilisk.log
 #   submodule.file.handler   : It is used by logger 'pysilisk.submodule'
 #                              to isolate the logs of a specific module
+#
+#
+# Formatters
+# ----------
+# We define two formatters
+#   simple.formatter         :
+#   colorlog.formatter       : It is based on colorlog.ColoredFormatter
+#                              To install it use 'pip install colorlog'
+#
 #
 # Loggers
 # -------
@@ -28,8 +42,21 @@ version: 1
 disable_existing_loggers: True
 
 formatters:
-    logformat:
+    simple.formatter:
         format: "\n%(levelname)s: %(name)s: %(message)s"
+
+    colorlog.formatter:
+        (): colorlog.colorlog.ColoredFormatter  # class doesn't work
+        format: "\n%(log_color)s%(name)s: %(levelname)s: %(message)s"
+        log_colors:
+            DEBUG:    bold_green #cyan
+            INFO:     white
+            WARNING:  yellow
+            ERROR:    bold_red
+            CRITICAL: red
+        style: '%'
+        reset: True
+
 
 handlers:
     # Traditional console
@@ -37,7 +64,7 @@ handlers:
         class: logging.StreamHandler
         level: DEBUG
         stream: ext://sys.stderr
-        formatter: logformat
+        formatter: simple.formatter
 
     # Console-handler with color support
     # If its show_* options are not disabled,
@@ -46,12 +73,18 @@ handlers:
         class: coloredlogs.ColoredStreamHandler
         level: DEBUG
         stream: ext://sys.stderr
-        formatter: logformat
+        formatter: simple.formatter
         show_name: False
         show_severity: False
         show_timestamps: False
         show_hostname: False
         use_chroot: False
+
+    colorlog.console.handler:
+        class: logging.StreamHandler
+        level: DEBUG
+        stream: ext://sys.stderr
+        formatter: colorlog.formatter
 
     # Main file handler of PysiliskSQL
     # Each execution will clear previous logs (mode: w)
@@ -59,21 +92,21 @@ handlers:
         class: logging.FileHandler
         level: DEBUG
         filename: log/pysilisk.log
-        formatter: logformat
+        formatter: simple.formatter
         mode: w
 
     submodule.file.handler:
         class: logging.FileHandler
         level: DEBUG
         filename: log/pysilisk.submodule.log
-        formatter: logformat
+        formatter: simple.formatter
         mode: w
 
 loggers:
     # Main logger of PysiliskSQL
     pysilisk:
         level: DEBUG
-        handlers: [colored.console.handler, pysilisk.file.handler]
+        handlers: [pysilisk.file.handler, colorlog.console.handler]
         propagate: no
 
     # logger of a particular module
@@ -84,5 +117,5 @@ loggers:
 
 root:
     level: DEBUG
-    handlers: [console.handler]
+    handlers: [colorlog.console.handler]
 ...
