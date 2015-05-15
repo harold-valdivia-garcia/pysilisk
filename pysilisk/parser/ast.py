@@ -335,6 +335,76 @@ def parse(sql_str):
             ast_inserted_values.append(ast_value)
             logger.debug('value: %s  -  type: %s', literal_value, literal_type)
         return AST_Insert(table_name, ast_inserted_values)
+    elif stmt_type == 'DELETE':
+        table_name = result.table_name[0]
+        ast_where_clause = get_ast_expression(result.where_clause)
+        return AST_Delete(table_name, ast_where_clause)
+
+
+class SQLParseException(Exception):
+    pass
+
+
+def get_ast_expression(raw_expr, original_raw_expr=None, current_depth=0):
+    MAX_DEPTH = 100
+    if current_depth <= MAX_DEPTH:
+        align = '  ' * current_depth
+        next_depth = current_depth + 1
+        if 'bool_expr' in raw_expr:
+            logger.debug('%s-bool_expr: %s', align, raw_expr.bool_expr)
+            next_expr = raw_expr.bool_expr[0]
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'bool_term' in raw_expr:
+            logger.debug('%s-bool_term: %s', align, raw_expr.bool_term)
+            next_expr = raw_expr.bool_term[0]
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'bool_factor' in raw_expr:
+            logger.debug('%s-bool_factor: %s', align, raw_expr.bool_factor)
+            next_expr = raw_expr.bool_factor[0]
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'predicate' in raw_expr:
+            logger.debug('%s-predicate: %s', align, raw_expr.predicate)
+            next_expr = raw_expr.predicate
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'arith_expr' in raw_expr:
+            logger.debug('%s-arith_expr: %s', align, raw_expr.arith_expr)
+            next_expr = raw_expr.arith_expr[0]
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'term' in raw_expr:
+            logger.debug('%s-term: %s', align, raw_expr.term)
+            next_expr = raw_expr.term[0]
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'signed_factor' in raw_expr:
+            logger.debug('%s-signed_factor: %s', align, raw_expr.signed_factor)
+            next_expr = raw_expr.signed_factor[0]
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'factor' in raw_expr:
+            logger.debug('%s-factor: %s', align, raw_expr.factor)
+            next_expr = raw_expr.factor
+            get_ast_expression(next_expr, original_raw_expr, next_depth)
+        elif 'integer_literal' in raw_expr:
+            logger.debug('%s-integer_literal: %s', align, raw_expr.integer_literal)
+
+
+        elif 'float_literal' in raw_expr:
+            logger.debug('%s-float_literal: %s', align, raw_expr.float_literal)
+
+
+        elif 'string_literal' in raw_expr:
+            logger.debug('%s-string_literal: %s', align, raw_expr.string_literal)
+
+
+        elif 'function' in raw_expr:
+            logger.debug('%s-function: %s', align, raw_expr.function)
+            #next_expr = raw_expr.bool_expr
+            #get_ast_expression(next_expr, original_raw_expr, next_depth)
+        else:
+            logger.error('Error when processing expr: %s',  raw_expr)
+            logger.error('Original expr: %s', original_raw_expr)
+            raise SQLParseException()
+    else:
+        logger.error('Error during ast-expression creation. max-depth exceeded')
+        raise SQLParseException()
 
 def find_type(exp, deep=0, parent=''):
     if deep > 100:
