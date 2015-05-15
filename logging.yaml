@@ -47,7 +47,7 @@ formatters:
 
     colorlog.formatter:
         (): colorlog.colorlog.ColoredFormatter  # class doesn't work
-        format: "\n%(log_color)s%(name)s: %(levelname)s: %(message)s"
+        format: "%(log_color)s[%(levelname)s - %(name)s]  %(white)s%(message)s"
         log_colors:
             DEBUG:    bold_green #cyan
             INFO:     white
