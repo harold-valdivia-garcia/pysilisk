@@ -377,7 +377,27 @@ def get_ast_expression(raw_expr, original_raw_expr=None, current_depth=0, parent
         elif 'bool_term' in raw_expr:
             logger.debug('%s-bool_term: %s', align, raw_expr.bool_term)
             next_expr = raw_expr.bool_term[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            # ==============================
+            if len(next_expr) == 1:
+                get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            else:
+                # A bool-term with length > 1, has bool_factors concatenated
+                # with AND operators: [a, AND, b, AND, c]. For this expression,
+                # we create a ast-tree of the form:
+                #             AND
+                #           /    \
+                #        AND      c
+                #       /   \
+                #      a     b
+                get_ast_expression(next_expr[0], original_raw_expr, next_depth, raw_expr)
+                #or_exp = AST_OR(left_expr=first_exp)
+                #print('OR-right: %s' % str_deep, bool_expr[0])
+                for item in next_expr[1:]:
+                    if item != 'AND':
+                        logger.debug('%s-AND', align)
+                        get_ast_expression(item, original_raw_expr, next_depth, raw_expr)
+            # ==============================
+            #get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'bool_factor' in raw_expr:
             logger.debug('%s-bool_factor: %s', align, raw_expr.bool_factor)
             next_expr = raw_expr.bool_factor[0]
@@ -385,7 +405,16 @@ def get_ast_expression(raw_expr, original_raw_expr=None, current_depth=0, parent
         elif 'predicate' in raw_expr:
             logger.debug('%s-predicate: %s', align, raw_expr.predicate)
             next_expr = raw_expr.predicate
-            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            # ==============================
+            if len(next_expr) == 1:
+                get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            else:
+                get_ast_expression(next_expr[0], original_raw_expr, next_depth, raw_expr)
+                pred_op = next_expr[1]
+                logger.debug('%s- %s', align, pred_op)
+                get_ast_expression(next_expr[2], original_raw_expr, next_depth, raw_expr)
+            # ==============================
+            #get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'arith_expr' in raw_expr:
             logger.debug('%s-arith_expr: %s', align, raw_expr.arith_expr)
             next_expr = raw_expr.arith_expr[0]
