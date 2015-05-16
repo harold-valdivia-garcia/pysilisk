@@ -146,7 +146,7 @@ funct_call = Group(funct_name + LPAR + funct_args + RPAR).setResultsName('functi
 #      <term>           ::= <signed factor> [<mult-op> factor]*
 #      <signed factor>  ::= [<sign>] <factor>
 #      <factor>         ::= <integer> | <variable>| function | (<bool-expr>)
-factor << (Group(literal_value)|funct_call|column|Group(LPAR + bool_expr + RPAR))
+factor << (Group(literal_value)|Group(funct_call)|Group(column)|Group(LPAR + bool_expr + RPAR))
 signed_factor << Group(Optional(sign_op) + factor)
 term << Group(signed_factor + ZeroOrMore(mult_div_mod_op + factor))
 arith_expr << Group(term + ZeroOrMore(add_sub_op + term))

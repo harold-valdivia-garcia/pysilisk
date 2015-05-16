@@ -345,61 +345,83 @@ class SQLParseException(Exception):
     pass
 
 
-def get_ast_expression(raw_expr, original_raw_expr=None, current_depth=0):
+def get_ast_expression(raw_expr, original_raw_expr=None, current_depth=0, parent=None):
     MAX_DEPTH = 100
     if current_depth <= MAX_DEPTH:
-        align = '  ' * current_depth
+        align = '| ' * current_depth
         next_depth = current_depth + 1
         if 'bool_expr' in raw_expr:
             logger.debug('%s-bool_expr: %s', align, raw_expr.bool_expr)
-            next_expr = raw_expr.bool_expr[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            next_expr = raw_expr.bool_expr[0]  # Because of the Group in bool_expr
+            # ==============================
+            if len(next_expr) == 1:
+                get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            else:
+                # A bool-expr with length > 1, has bool_terms concatenated
+                # with OR operators: [a, OR, b, OR, c]. For this expression,
+                # we create a ast-tree of the form:
+                #             OR
+                #           /   \
+                #        OR      c
+                #       /  \
+                #      a    b
+                get_ast_expression(next_expr[0], original_raw_expr, next_depth, raw_expr)
+                #or_exp = AST_OR(left_expr=first_exp)
+                #print('OR-right: %s' % str_deep, bool_expr[0])
+                for item in next_expr[1:]:
+                    if item != 'OR':
+                        logger.debug('%s-OR', align)
+                        get_ast_expression(item, original_raw_expr, next_depth, raw_expr)
+            # ==============================
+            #get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'bool_term' in raw_expr:
             logger.debug('%s-bool_term: %s', align, raw_expr.bool_term)
             next_expr = raw_expr.bool_term[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'bool_factor' in raw_expr:
             logger.debug('%s-bool_factor: %s', align, raw_expr.bool_factor)
             next_expr = raw_expr.bool_factor[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'predicate' in raw_expr:
             logger.debug('%s-predicate: %s', align, raw_expr.predicate)
             next_expr = raw_expr.predicate
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'arith_expr' in raw_expr:
             logger.debug('%s-arith_expr: %s', align, raw_expr.arith_expr)
             next_expr = raw_expr.arith_expr[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'term' in raw_expr:
             logger.debug('%s-term: %s', align, raw_expr.term)
             next_expr = raw_expr.term[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'signed_factor' in raw_expr:
             logger.debug('%s-signed_factor: %s', align, raw_expr.signed_factor)
             next_expr = raw_expr.signed_factor[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'factor' in raw_expr:
-            logger.debug('%s-factor: %s', align, raw_expr.factor)
+            logger.debug('%s-factor: %s - type: %s - keys: %s', align, raw_expr.factor, raw_expr.factor.getName(), list(raw_expr.factor.keys()) )
             next_expr = raw_expr.factor
-            get_ast_expression(next_expr, original_raw_expr, next_depth)
+            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'integer_literal' in raw_expr:
             logger.debug('%s-integer_literal: %s', align, raw_expr.integer_literal)
-
-
         elif 'float_literal' in raw_expr:
             logger.debug('%s-float_literal: %s', align, raw_expr.float_literal)
-
-
         elif 'string_literal' in raw_expr:
             logger.debug('%s-string_literal: %s', align, raw_expr.string_literal)
-
-
+        elif 'column' in raw_expr:
+            column = raw_expr.column
+            table_name = column.table_name[0] if len(column) == 2 else ''
+            column_name = column.column_name[0]
+            logger.debug('%s-column: %s.%s', align, table_name, column_name)
         elif 'function' in raw_expr:
             logger.debug('%s-function: %s', align, raw_expr.function)
             #next_expr = raw_expr.bool_expr
             #get_ast_expression(next_expr, original_raw_expr, next_depth)
         else:
             logger.error('Error when processing expr: %s',  raw_expr)
+            logger.error('type-expr: %s', raw_expr.getName())
+            logger.error('Parent expr: %s', parent)
+            logger.error('type-parent: %s', parent.getName())
             logger.error('Original expr: %s', original_raw_expr)
             raise SQLParseException()
     else:
@@ -421,7 +443,7 @@ def find_type(exp, deep=0, parent=''):
             table_name = column.table_name[0]
         column_name = column.column_name[0]
         print("column-tbl-name: %s" % table_name)
-        print("column-col-name: %s " % column_name)
+        print("column-col-name: %s" % column_name)
         return AST_Column(column_name, table_name)
     elif 'integer_literal' in exp:
         integer_literal =  exp.integer_literal
