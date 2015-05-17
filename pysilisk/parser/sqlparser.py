@@ -162,7 +162,8 @@ predicate = predicate.setResultsName('predicate')
 #      <bool-expr>      ::= <bool-term> [OR <bool-term>]*
 #      <bool-term>      ::= <not-factor> [AND <not-factor>]*
 #      <bool-factor>    ::= [NOT] <predicate>
-bool_factor << Group(Optional(NOT) + predicate)
+not_op = NOT.setResultsName('not_op')
+bool_factor << Group(Optional(not_op) + predicate)
 bool_term << Group(bool_factor + ZeroOrMore(AND  + bool_factor))
 bool_expr <<  Group(bool_term + ZeroOrMore(OR + bool_term))
 
