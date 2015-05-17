@@ -421,7 +421,6 @@ def get_ast_expression2(raw_expr, expr_type, original_raw_expr=None, current_dep
                 logger.debug('%s| - SIGN: %s', align, signed_factor.sign_op)
             get_ast_expression2(signed_factor.factor, 'factor', original_raw_expr, next_depth, expr_type)
         elif  expr_type == 'factor':
-            #logger.debug('%s- size: %s   -   type: %s', align, len(raw_expr), raw_expr.getName())
             factor_type = raw_expr.getName()
             factor = raw_expr
             if  factor_type != 'factor':
@@ -437,9 +436,19 @@ def get_ast_expression2(raw_expr, expr_type, original_raw_expr=None, current_dep
             pass
             logger.debug('%s- value: %s', align, raw_expr)
         elif  expr_type == 'column':
-            logger.debug('%s- value: %s', align, raw_expr)
+            column = raw_expr
+            if column.table_name != '':
+                logger.debug('%s- tbname: %s', align, column.table_name[0])
+            logger.debug('%s- colname: %s', align, column.column_name[0])
         elif  expr_type == 'function':
-            logger.debug('%s- value: %s', align, raw_expr)
+            function = raw_expr
+            logger.debug('%s- value: %s  -  size: %s  -  keys: %s', align, raw_expr, len(raw_expr), list(function.keys()))
+            logger.debug('%s- funct-name: %s', align, function.funct_name[0])
+
+            logger.debug('%s- funct-args: %s  -  size: %s  -  type: %s', align, function.funct_args, len(function.funct_args), function.funct_args.getName())
+            for arg in function.funct_args:
+                logger.debug('%s| - arg: %s  -  type: %s ', align, arg, arg.getName())
+                get_ast_expression2(arg, 'arith_expr', original_raw_expr, next_depth, expr_type)
         else:
             logger.error('Error when processing expr: %s',  raw_expr)
             logger.error('type-expr: %s', raw_expr.getName())
