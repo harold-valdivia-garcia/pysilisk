@@ -1,9 +1,9 @@
 import logging
 from pysilisk.sqltypes import SQLDataType, NullConstrain
 from pysilisk.parser.sqlparser import SQL_GRAMMAR
+from pyparsing import ParseResults
 
 logger = logging.getLogger(__name__)
-
 
 class ComparisonOp(object):
     EQ = 3                # Conditional equality("=") expression
@@ -314,7 +314,7 @@ def parse(sql_str):
         if result.index_type != '':
             idx_type = result.index_type
             idx_columns = [c for c in result.list_index_columns]
-            idx_name = 'pk_%s' % table_name
+            idx_name = 'pk_%s' % table_name  # Only 1 clustered-index per table
             logger.debug('index: "%s"', idx_name)
             logger.debug('index-columns: "%s"', idx_columns)
             logger.debug('indexType: "%s"', idx_type)
@@ -343,6 +343,118 @@ def parse(sql_str):
 
 class SQLParseException(Exception):
     pass
+
+
+
+def get_ast_expression2(raw_expr, expr_type, original_raw_expr=None, current_depth=0, parent=None):
+    MAX_DEPTH = 100
+    if current_depth <= MAX_DEPTH:
+        align = '| ' * current_depth
+        next_depth = current_depth + 1
+        try:
+            logger.debug('%s- typeProc: %s  -  typeExpr: %s  -  expr: %s  -  parent-type: %s', align, expr_type, raw_expr.getName() if not isinstance(raw_expr, str) else 'NONE', raw_expr, parent)
+        except TypeError:
+            logger.debug('%s- typeProc: %s  -  typeExpr: %s  -  expr: %s  -  parent-type: %s', align, expr_type, 'NONE' if not isinstance(raw_expr, str) else 'NONE', raw_expr, parent)
+
+        if expr_type == 'where_clause':
+            next_expr = raw_expr.bool_expr
+            get_ast_expression2(next_expr, 'bool_expr', original_raw_expr, next_depth, expr_type)
+        elif expr_type == 'bool_expr':
+            bool_expr = raw_expr[0]
+            if len(bool_expr) == 1:
+                get_ast_expression2(bool_expr[0], 'bool_term', original_raw_expr, next_depth, expr_type)
+            else:
+                for item in bool_expr:
+                    if item != 'OR':
+                        get_ast_expression2(item, 'bool_term', original_raw_expr, next_depth, expr_type)
+                    else:
+                        logger.debug('%s| - LOGICAL-OR', align)
+        elif expr_type == 'bool_term':
+            bool_term = raw_expr
+            if len(bool_term) == 1:
+                get_ast_expression2(bool_term[0], 'bool_factor', original_raw_expr, next_depth, expr_type)
+            else:
+                for item in bool_term:
+                    if item != 'AND':
+                        get_ast_expression2(item, 'bool_factor', original_raw_expr, next_depth, expr_type)
+                    else:
+                        logger.debug('%s| - LOGICAL-AND', align)
+        elif  expr_type == 'bool_factor':
+            bool_factor = raw_expr
+            if bool_factor.not_op == 'NOT':
+                logger.debug('%s| - NOT-OP predicate', align)
+            #logger.debug('%s| - predicat: %s', align, raw_expr.predicate)
+            get_ast_expression2(raw_expr.predicate, 'predicate', original_raw_expr, next_depth, expr_type)
+        elif  expr_type == 'predicate':
+            predicate = raw_expr
+            if len(predicate) == 1:
+                get_ast_expression2(predicate[0], 'arith_expr', original_raw_expr, next_depth, expr_type)
+            else:
+                logger.debug('%s| - PRED-OP: %s', align, predicate[1])
+                get_ast_expression2(predicate[0], 'arith_expr', original_raw_expr, next_depth, expr_type)
+                get_ast_expression2(predicate[2], 'arith_expr', original_raw_expr, next_depth, expr_type)
+        elif  expr_type == 'arith_expr':
+            arith_expr = raw_expr
+            if len(arith_expr) == 1:
+                get_ast_expression2(arith_expr[0], 'term', original_raw_expr, next_depth, expr_type)
+            else:
+                for item in arith_expr:
+                    if item != '+' and item != '-':
+                        get_ast_expression2(item, 'term', original_raw_expr, next_depth, expr_type)
+                    else:
+                        logger.debug('%s|  op: %s', align, item)
+        elif  expr_type == 'term':
+            term = raw_expr
+            if len(term) == 1:
+                get_ast_expression2(term[0], 'signed_factor', original_raw_expr, next_depth, expr_type)
+            else:
+                next_expr_type = 'signed_factor'
+                for item in term:
+                    if item != '*' and item != '/':
+                        get_ast_expression2(item, next_expr_type, original_raw_expr, next_depth, expr_type)
+                        next_expr_type = 'factor'
+                    else:
+                        logger.debug('%s|  op: %s', align, item)
+        elif  expr_type == 'signed_factor':
+            signed_factor = raw_expr
+            if signed_factor.sign_op != '':
+                logger.debug('%s| - SIGN: %s', align, signed_factor.sign_op)
+            get_ast_expression2(signed_factor.factor, 'factor', original_raw_expr, next_depth, expr_type)
+        elif  expr_type == 'factor':
+            #logger.debug('%s- size: %s   -   type: %s', align, len(raw_expr), raw_expr.getName())
+            factor_type = raw_expr.getName()
+            factor = raw_expr
+            if  factor_type != 'factor':
+                get_ast_expression2(factor[0], factor_type, original_raw_expr, next_depth, expr_type)
+            else:
+                get_ast_expression2(factor.bool_expr, 'bool_expr', original_raw_expr, next_depth, expr_type)
+        elif  expr_type == 'integer_literal':
+            logger.debug('%s- value: %s', align, raw_expr)
+        elif  expr_type == 'float_literal':
+            pass
+            logger.debug('%s- value: %s', align, raw_expr)
+        elif  expr_type == 'string_literal':
+            pass
+            logger.debug('%s- value: %s', align, raw_expr)
+        elif  expr_type == 'column':
+            logger.debug('%s- value: %s', align, raw_expr)
+        elif  expr_type == 'function':
+            logger.debug('%s- value: %s', align, raw_expr)
+        else:
+            logger.error('Error when processing expr: %s',  raw_expr)
+            logger.error('type-expr: %s', raw_expr.getName())
+            logger.error('Parent expr: %s', parent)
+            logger.error('type-parent: %s', parent.getName())
+            logger.error('Original expr: %s', original_raw_expr)
+            raise SQLParseException()
+    else:
+        logger.error('Error during ast-expression creation. max-depth exceeded')
+        raise SQLParseException()
+
+
+
+
+
 
 
 def get_ast_expression(raw_expr, original_raw_expr=None, current_depth=0, parent=None):
@@ -418,15 +530,78 @@ def get_ast_expression(raw_expr, original_raw_expr=None, current_depth=0, parent
         elif 'arith_expr' in raw_expr:
             logger.debug('%s-arith_expr: %s', align, raw_expr.arith_expr)
             next_expr = raw_expr.arith_expr[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            # ==============================
+            if len(next_expr) == 1:
+                get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            else:
+                # A arith-expr with length > 1, has terms concatenated with
+                # "+" or "-" operators:  [a, +, b, +, c]. For this expression,
+                # we create a ast-tree of the form:
+                #             +
+                #           /  \
+                #          +    c
+                #        /  \
+                #       a    b
+                get_ast_expression(next_expr[0], original_raw_expr, next_depth, raw_expr)
+                #or_exp = AST_OR(left_expr=first_exp)
+                #print('OR-right: %s' % str_deep, bool_expr[0])
+                for item in next_expr[1:]:
+                    if item not in ['+', '-']:
+                        get_ast_expression(item, original_raw_expr, next_depth, raw_expr)
+                    else:
+                        logger.debug('%s- "%s"', align, item)
+            # ==============================
         elif 'term' in raw_expr:
-            logger.debug('%s-term: %s', align, raw_expr.term)
+            logger.debug('%s-term: %s  -  type: %s  -  size: %s  -  keys: %s', align, raw_expr.term, raw_expr.term.getName(), len(raw_expr.term), list(raw_expr.term.keys()))
             next_expr = raw_expr.term[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            logger.debug('%s-next_expr: %s  - type: %s  - size: %s  - keys: %s', align, next_expr, next_expr.getName(), len(next_expr), list(next_expr.keys()))
+            logger.debug('%s-term-signed: %s ', align, next_expr.signed_factor, )
+
+            # ==============================
+            if len(next_expr) == 1:
+                get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            else:
+                # A arith-expr with length > 1, has terms concatenated with
+                # "*" or "/" operators:  [a, *, b, *, c]. For this expression,
+                # we create a ast-tree of the form:
+                #             *
+                #           /  \
+                #          *    c
+                #        /  \
+                #       a    b
+                item = next_expr[0]
+                if len(item) > 1:  # It is a signed_factor with SIGN
+                    sf_expr = ParseResults(toklist=next_expr.signed_factor,
+                                           name='signed_factor')
+                else:
+                    sf_expr = ParseResults(toklist=next_expr.signed_factor[0],
+                                           name='signed_factor')
+                get_ast_expression(sf_expr, original_raw_expr, next_depth, raw_expr)
+
+                # The others
+                for idx in range(1, len(next_expr)):
+                    item = next_expr[idx]
+                    if item not in ['*', '/']:
+                        logger.debug('%s- item-type: %s', align, item.getName())
+                        get_ast_expression(item, original_raw_expr, next_depth, raw_expr)
+                    else:
+                        logger.debug('%s- "%s"', align, item)
+            # ==============================
         elif 'signed_factor' in raw_expr:
-            logger.debug('%s-signed_factor: %s', align, raw_expr.signed_factor)
+            logger.debug('%s-signed_factor: %s  - signed-factor-type: %s', align, raw_expr.signed_factor, raw_expr.signed_factor.getName())
             next_expr = raw_expr.signed_factor[0]
-            get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            logger.debug('%s-next_expr: %s  - size: %s   -  ', align, next_expr, len(next_expr))
+            # ==============================
+            sign = ''
+            if len(next_expr) == 1:
+                logger.debug('%s- SIGN: %s', align, None)
+                get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
+            else:
+                sign = next_expr[0]
+                logger.debug('%s- SIGN: %s', align, sign)
+                get_ast_expression(next_expr[1], original_raw_expr, next_depth, raw_expr)
+            # ==============================
+            #get_ast_expression(next_expr, original_raw_expr, next_depth, raw_expr)
         elif 'factor' in raw_expr:
             logger.debug('%s-factor: %s - type: %s - keys: %s', align, raw_expr.factor, raw_expr.factor.getName(), list(raw_expr.factor.keys()) )
             next_expr = raw_expr.factor
