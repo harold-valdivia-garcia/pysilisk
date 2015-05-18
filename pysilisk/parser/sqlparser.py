@@ -94,11 +94,11 @@ column = column.setResultsName('column')
 #      <bool-expr>      ::= <bool-term> [OR <bool-term>]*
 #      <bool-term>      ::= <not-factor> [AND <not-factor>]*
 #      <bool-factor>    ::= [NOT] <predicate>
-#      <predicate>      ::= | <arith-expr> [<pred-op> <arith-expr>]
+#      <predicate>      ::= <arith-expr> [<pred-op> <arith-expr>]
 #      <arith-expr>     ::= <term> [<add-op> <term>]*
 #      <term>           ::= <signed factor> [<mult-op> factor]*
 #      <signed factor>  ::= [<sign>] <factor>
-#      <factor>         ::= <integer> | <variable>| function | (<bool-expr>)
+#      <factor>         ::= <literal> | <column> | function | (<bool-expr>)
 #
 # Note: Writing a perfect grammar for the boolean and arithmetic expressions
 #       are beyond the scope of this project. I followed the approach suggested
@@ -146,7 +146,7 @@ funct_call = Group(funct_name + LPAR + funct_args + RPAR).setResultsName('functi
 #      <arith-expr>     ::= <term> [<add-op> <term>]*
 #      <term>           ::= <signed factor> [<mult-op> factor]*
 #      <signed factor>  ::= [<sign>] <factor>
-#      <factor>         ::= <integer> | <variable>| function | (<bool-expr>)
+#      <factor>         ::= <literal> | <column> | function | (<bool-expr>)
 factor << (Group(literal_value)|Group(funct_call)|Group(column)|Group(LPAR + bool_expr + RPAR))
 signed_factor << Group(Optional(sign_op) + factor)
 term << Group(signed_factor + ZeroOrMore(mult_div_mod_op + factor))
