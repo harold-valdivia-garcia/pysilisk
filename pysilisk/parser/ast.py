@@ -385,7 +385,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
     # Debugging Stuffs
     align = '|  ' * depth  # Used to output the debug-info as a tree
     new_depth = depth + 1  # Use to output the debug-info as a tree
-    expr_name = get_expression_name()
+    expr_name = get_expression_name(parsed_expr)
     logger.debug('%s- Expr: %s', align, parsed_expr)
     logger.debug(('%s- expr-type: %s '
                   ' -  expr-name: %s '
