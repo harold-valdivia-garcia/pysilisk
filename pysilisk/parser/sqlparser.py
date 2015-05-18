@@ -121,7 +121,7 @@ sign_op = add_sub_op.setResultsName('sign_op')
 
 # Predicate Operators (a.k.a Relational-Operators or Comparison-Operators)
 equal_op = Literal("=")
-diff_op = Literal("<>")
+neq_op = Literal("<>")
 less_op = Literal("<")
 greater_op  = Literal(">")
 less_than_op = Literal("<=")
@@ -137,8 +137,9 @@ bool_expr = Forward().setResultsName('bool_expr')
 bool_term = Forward().setResultsName('bool_term')
 
 # Define a function
-funct_name = identifier.copy()
+funct_name = identifier.setResultsName('funct_name')
 funct_args = Group(Optional(delimitedList(arith_expr)))
+funct_args = funct_args.setResultsName('funct_args')
 funct_call = Group(funct_name + LPAR + funct_args + RPAR).setResultsName('function')
 
 # Define arith-expression
@@ -154,7 +155,7 @@ arith_expr << Group(term + ZeroOrMore(add_sub_op + term))
 # Define a predicate
 #      <predicate>      ::= <arith-expr> [<pred-op> <arith-expr>]
 #      <pred-op>        ::= <> | < | >| <= |  >= | =
-predicate_op = diff_op|greater_then_op|less_than_op|greater_op|less_op|equal_op
+predicate_op = neq_op|greater_then_op|less_than_op|greater_op|less_op|equal_op
 predicate = Group(arith_expr + Optional(predicate_op + arith_expr))
 predicate = predicate.setResultsName('predicate')
 
