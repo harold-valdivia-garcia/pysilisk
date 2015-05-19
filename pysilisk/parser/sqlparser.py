@@ -1,4 +1,5 @@
 import logging
+import pyparsing
 
 from pysilisk.parser.sqlgrammar import SQL_GRAMMAR
 from pysilisk.parser.ast import AST_DropIndex, AST_DropTable, AST_CreateIndex
@@ -9,32 +10,41 @@ from pysilisk.parser.ast import AST_EQ, AST_NEQ, AST_GTE, AST_LTE, AST_GT
 from pysilisk.parser.ast import AST_LT, AST_Add, AST_Sub, AST_Mult, AST_Div
 from pysilisk.parser.ast import AST_NegArithExpr, AST_Column, AST_FunctionCall
 from pysilisk.parser.ast import NullConstrain
-from pyparsing import ParseResults
-
-import pyparsing
-
 
 
 logger = logging.getLogger(__name__)
 
 
 class SQLParser(object):
+    """This Parser generates the AST-tree of sql-query that match
+    the sql-grammar specified by SQL_GRAMMAR. Since SQL_GRAMMAR is
+    defined using pyparsing, our SQLParser translates the output of
+    SQL_GRAMMAR.parseString(sql) into a tree of AST nodes.
+
+    For example, given the query:
+        SELECT name, score/4
+        FROM student, course
+        WHERE year=2000;
+
+    SQLParse generates:
+                     ____________ ast-select __________________
+                   /                     \                     \
+                 /                        \                     \
+            prj_attrs	                from_clause	        where_clause
+           /        \	                 /      \	              |
+     ast-col      ast-div	        ast-tbl    ast-tbl	      ast-equal
+      (name)       /     \	      (student)   (course)	       /    \
+              ast-col   ast-num		                     ast-col    ast-num
+              (score)       (4)		                      (year)     (2000)
+    """
     def parse_query(self, sql_str):
         try:
             return parse(sql_str)
-        except UnknownStatementOrExpressionException as parse_exc:
-            # Add the sql_str
-            parse_exc.sql_str = sql_str
-            raise parse_exc
-        except pyparsing.ParseException as parse_exc:
-            pass
+        except pyparsing.ParseException as ex:
+            error_desc = ex.msg.split(',')[0]  # Some ParseException's msg
+                                               # are too long.
+            raise SQLParseException(sql_str, ex.loc, error_desc)
 
-
-class UnknownStatementOrExpressionException(Exception):
-    """Unrecoverable Error produced during the creation
-     of the AST-tree of an unknown sql-stmt-type or an
-     unknown expression."""
-    pass
 
 # Initial parse-implementation:
 def parse(sql_str):
@@ -114,26 +124,6 @@ def parse(sql_str):
         msg = 'Unknown Stmt-type: "%s" in query: "%s"' % (stmt_type, sql_str)
         raise UnknownStatementOrExpressionException(msg)
 
-
-def get_expression_name(parseResult):
-    """
-    To safely call the getName() method in ParseResults objects during
-    DEBUGGING. With getName(), we obtain the name of the grammar-rule
-    that matched the result. These objects are created by parseString().
-    In our case, we create them, when we call:
-        result = SQL_GRAMMAR.parseString(sql_str)
-        result = where_clause.parseString("WHERE c > 3*5")
-    For some reason, some of the inner ParseResults objects generated
-    by the where_clause-rule are crashing when their getName is called.
-    """
-    expr_name = 'NONE'
-    if logger.level == logging.DEBUG:
-        try:
-            if isinstance(parseResult, ParseResults):
-                expr_name = parseResult.getName()
-        except TypeError:
-            pass
-    return expr_name
 
 def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
     """Create an AST-tree representation of an bool and arith expression.
@@ -385,3 +375,66 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
                'Expr: "%s"') % (_type, parent, parsed_expr)
         logger.error(msg)
         raise UnknownStatementOrExpressionException(msg)
+
+
+def get_expression_name(parseResult):
+    """
+    To safely call the getName() method in ParseResults objects during
+    DEBUGGING. With getName(), we obtain the name of the grammar-rule
+    that matched the result. These objects are created by parseString().
+    In our case, we create them, when we call:
+        result = SQL_GRAMMAR.parseString(sql_str)
+        result = where_clause.parseString("WHERE c > 3*5")
+    For some reason, some of the inner ParseResults objects generated
+    by the where_clause-rule are crashing when their getName is called.
+    """
+    expr_name = 'NONE'
+    if logger.level == logging.DEBUG:
+        try:
+            if isinstance(parseResult, pyparsing.ParseResults):
+                expr_name = parseResult.getName()
+        except TypeError:
+            pass
+    return expr_name
+
+
+class SQLParseException(Exception):
+    """Exception produced while parsing a syntactically invalid query
+    (query that does not follow our sql-grammar). This exception is
+    similar to pyparsing.ParseException and we use it to reduce the
+    our dependency on pyparsing.
+
+    Additionally, this exception creates a readable message for users.
+    For example, given the invalid query:
+        SELECT age, class,
+               title, address,
+        FROM student;
+    The message would be:
+        Error: Expected "FROM"  (at char 41), Marked-str(»•«):
+           ⎪SELECT age, class,
+           ⎪       title, address»•«,
+           ⎪FROM student;
+    """
+    def __init__(self, sql_str, error_loc=0, error_desc=None):
+        self.sql_str = sql_str           # str that generated the error
+        self.error_location = error_loc  # error-location
+        self.error_desc = error_desc     # error-description
+
+        # Create a readable message
+        marked_sql = []
+        marked_sql.extend(sql_str)
+        marked_sql.insert(error_loc, '»•«')
+        marked_sql = ''.join(marked_sql)
+        marked_sql = marked_sql.split('\n')
+        marked_sql = ''.join(['   ⎪' + line + '\n' for line in marked_sql])
+        msg = ("Error: %s  (at char %s), "
+               "Marked-str(»•«):\n%s") % (error_desc, error_loc, marked_sql)
+        self.message = msg
+        super().__init__(msg)
+
+
+class UnknownStatementOrExpressionException(Exception):
+    """Unrecoverable Error produced during the creation
+     of the AST-tree of an unknown sql-stmt-type or an
+     unknown expression."""
+    pass
