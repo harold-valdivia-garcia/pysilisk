@@ -28,15 +28,15 @@ class SQLParser(object):
         WHERE year=2000;
 
     SQLParse generates:
-                     ____________ ast-select __________________
-                   /                     \                     \
-                 /                        \                     \
-            prj_attrs	                from_clause	        where_clause
-           /        \	                 /      \	              |
-     ast-col      ast-div	        ast-tbl    ast-tbl	      ast-equal
-      (name)       /     \	      (student)   (course)	       /    \
-              ast-col   ast-num		                     ast-col    ast-num
-              (score)       (4)		                      (year)     (2000)
+                     ____________ ast-select ___________________
+                   /                     \                       \
+                 /                        \                       \
+          prj_attrs                   from_clause             where_clause
+          /       \                    /       \                   |
+    ast-col       ast-div         ast-tbl     ast-tbl          ast-equal
+     (name)        /    \       (student)    (course)           /     \
+              ast-col   ast-num                            ast-col   ast-num
+              (score)       (4)                             (year)    (2000)
     """
     def parse_query(self, sql_str):
         try:
