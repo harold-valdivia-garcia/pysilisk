@@ -9,7 +9,8 @@ from pysilisk.parser.ast import AST_Delete, AST_OR, AST_AND, AST_NotBoolExpr
 from pysilisk.parser.ast import AST_EQ, AST_NEQ, AST_GTE, AST_LTE, AST_GT
 from pysilisk.parser.ast import AST_LT, AST_Add, AST_Sub, AST_Mult, AST_Div
 from pysilisk.parser.ast import AST_NegArithExpr, AST_Column, AST_FunctionCall
-from pysilisk.parser.ast import NullConstrain
+from pysilisk.parser.ast import NullConstrain, AST_EmptyExpr, AST_UpdateSetClause
+from pysilisk.parser.ast import AST_Update
 
 
 logger = logging.getLogger(__name__)
@@ -118,8 +119,29 @@ def parse(sql_str):
         return AST_Insert(table_name, ast_inserted_values)
     elif stmt_type == 'DELETE':
         table_name = result.table_name[0]
-        ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
+        logger.debug('table: %s', table_name)
+        if result.where_clause == '':
+            ast_where_clause = AST_EmptyExpr()
+        else:
+            ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
         return AST_Delete(table_name, ast_where_clause)
+    elif stmt_type == 'UPDATE':
+        table_name = result.table_name[0]
+        logger.debug('table: %s', table_name)
+        list_set_clauses = []
+        for set_clause in result.list_set_clauses:
+            colname = set_clause.column_name[0]
+            update_source = set_clause.update_source[0]
+            logger.debug('set-clause-column: %s', colname)
+            logger.debug('set-clause-update-source: %s', update_source)
+            ast_update_source = to_ast_expr(update_source, 'arith_expr')
+            ast_set_clause = AST_UpdateSetClause(colname, ast_update_source)
+            list_set_clauses.append(ast_set_clause)
+        if result.where_clause == '':
+            ast_where_clause = AST_EmptyExpr()
+        else:
+            ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
+        return AST_Update(table_name, list_set_clauses, ast_where_clause)
     else:
         msg = 'Unknown Stmt-type: "%s" in query: "%s"' % (stmt_type, sql_str)
         raise UnknownStatementOrExpressionException(msg)
@@ -389,7 +411,7 @@ def get_expression_name(parseResult):
     by the where_clause-rule are crashing when their getName is called.
     """
     expr_name = 'NONE'
-    if logger.level == logging.DEBUG:
+    if logger.isEnabledFor(logging.DEBUG):
         try:
             if isinstance(parseResult, pyparsing.ParseResults):
                 expr_name = parseResult.getName()
