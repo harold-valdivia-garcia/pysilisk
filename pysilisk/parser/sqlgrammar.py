@@ -4,10 +4,10 @@
 # for arithmetic and boolean expressions
 #
 # This code is based on:
-# http://pyparsing.wikispaces.com/file/view/simpleSQL.py
-# https://pyparsing.wikispaces.com/file/view/select_parser.py
-# https://github.com/tgulacsi/plsql_parser
-# http://stackoverflow.com/questions/16909380/sql-parsing-using-pyparsing
+#   http://pyparsing.wikispaces.com/file/view/simpleSQL.py
+#   https://pyparsing.wikispaces.com/file/view/select_parser.py
+#   https://github.com/tgulacsi/plsql_parser
+#   http://stackoverflow.com/questions/16909380/sql-parsing-using-pyparsing
 #
 # The references above could not handle some complex arith-expression or
 # they were extremely slow. So, I decided to implemented by myself.
@@ -21,6 +21,10 @@
 #   CREATE TABLE
 #   DROP INDEX
 #   CREATE INDEX
+#
+# Some grammar rules were borrowed from:
+#   http://www.savage.net.au/SQL/sql-92.bnff
+#   http://www.contrib.andrew.cmu.edu/~shadow/sql/sql2bnf.aug92.txt
 
 from pyparsing import Word, Literal, Group, QuotedString, Suppress, Forward
 from pyparsing import alphas, alphanums, CaselessKeyword, ZeroOrMore
@@ -88,8 +92,8 @@ column = column.setResultsName('column')
 # Boolean and Arithmetic expression:
 # =================================
 # Bool and Arith expressions are used in the where clause ( WHERE a > 3*c) and
-# in the projections (SELECT days/7 AS weeks). We based our expressions based on
-# the following grammar as a basis:
+# in the projections (SELECT days/7 AS weeks). We based our expressions on the
+# following grammar:
 #
 #      <bool-expr>      ::= <bool-term> [OR <bool-term>]*
 #      <bool-term>      ::= <not-factor> [AND <not-factor>]*
@@ -171,9 +175,12 @@ bool_expr <<  Group(bool_term + ZeroOrMore(OR + bool_term))
 # Where Clause (used in SELECT, DELETE and UPDATE)
 where_clause = Group(WHERE + bool_expr).setResultsName("where_clause")
 
+
 # SQL-STATEMENT DEFINITIONS:
 
+
 # Insert statement
+# ================
 # Contrary to standard SQL, our implementation of the Insert-Statement does not
 # consider the list-of-columns. To reduce the complexity of the execution of an
 # Insert-Stmt, pysilik supports only literals (not arith-expression) in the list
@@ -183,11 +190,12 @@ insert_values = delimitedList(Group(literal_value)).setResultsName('insert_value
 insert_stmt = INSERT + INTO + table_name + VALUES +LPAR + insert_values + RPAR
 
 # Delete Statement
+# ================
 delete_stmt = (DELETE + FROM +table_name + Optional(where_clause))
 
-# http://www.savage.net.au/SQL/sql-92.bnff
-# http://www.contrib.andrew.cmu.edu/~shadow/sql/sql2bnf.aug92.txt
+
 # Update Statement
+# ================
 #      <update>          ::= UPDATE <table> SET <list-set-clause> [<where>]
 #      <list-set-clause> ::= <set-clause> [, <set-clause>]*
 #      <set-clause>      ::= <colname> = <update-source>
@@ -200,52 +208,67 @@ update_stmt = (UPDATE + table_name +
                Optional(where_clause))
 
 # Select Statement
-#      <from-table> := <table> [AS  <alias>] [, <table> [AS  <alias>]]*
+# ================
+#      <select>         ::= SELECT [<set-quantifier>] <select list>
+#                           <from-clause>
+#                           <where-clause>
+#      <set-quantifier> ::= DISTINCT | ALL
+#      <select list>    ::= <start> | <derived-col> [<comma> <derived-col>]*
+#      <derived-col>    ::= <arith-expr> [AS <alias>]
+#      <from-clause>    ::= FROM <list-tables>
+#      <list-tables>    ::= <from-table> [<comma> <from-table>]*
+#      <from-table>     ::= <table> [AS  <alias>]
 alias = identifier.copy().setResultsName('alias')
 from_table = Group(table_name + Optional(Optional(AS) + alias))
 from_table = from_table.setResultsName("from_table")
-from_tables = delimitedList(from_table)  # tbl1 as t, tbl2 as b,...
-from_tables = from_tables.setResultsName("from_tables")
-from_clause = Group(FROM + from_tables).setResultsName("from_clause")
-#      <projected>  := "*" | <expr> [AS  <alias>] [, <expr> [AS  <alias>]]*
-star = Literal("*")
-attribute = star|Group(arith_expr + Optional(AS+alias))
-projected_attrs = delimitedList(attribute)
-projected_attrs = projected_attrs.setResultsName("projected_attributes")
-#      <select> := SELECT <projected> <from> [<where>]
-select_stmt = (SELECT + Optional(DISTINCT|ALL) + projected_attrs +
-              from_clause  +
+list_tables = delimitedList(from_table)
+list_tables = list_tables.setResultsName("list_tables")
+from_clause = Group(FROM + list_tables).setResultsName("from_clause")
+derived_column = Group(arith_expr + Optional(AS+alias))
+star = Literal("*").setResultsName('star')
+select_list = star|delimitedList(derived_column)
+select_list = select_list.setResultsName("select_list")
+set_quantifier = (DISTINCT|ALL).setResultsName("set_quantifier")
+select_stmt = (SELECT + Optional(set_quantifier) + select_list +
+              from_clause +
               Optional(where_clause))
 
 # Create-Index Statement
-#      <create-index> := CREATE INDEX <index-name>
-#                        ON <table-name> (list-columns)
-#                        USING {BTREE|HASH}
+# ======================
+#      <create-index>     ::= CREATE INDEX <index-name>
+#                             ON <table-name> (indexed-columns)
+#                             USING {BTREE|HASH}
+#      <indexed-columns>  ::= <colname> [<comma> <colname>]*
 index_name = identifier.setResultsName('index_name')
 index_type = (BTREE|HASH).setResultsName('index_type')
-index_columns =  (LPAR + delimitedList(column_name) + RPAR)
-index_columns = index_columns.setResultsName('list_index_columns')
+indexed_columns = (LPAR + delimitedList(column_name) + RPAR)
+indexed_columns = indexed_columns.setResultsName('indexed_columns')
 create_index_stmt = (CREATE + INDEX + index_name + ON + table_name +
-                     index_columns +
+                     indexed_columns +
                      USING + index_type)
 
 # Create-Table Statement
-#       <create-table> := CREATE TABLE <table-name> (
-#                             <column-definitions>
-#                             [, <column-definitions>]*
-#                             [, INDEX (<list-columns>) USING <index-type>]
-#                         )
-#  <column-def>  := <column> <data_type> + Optional(NULL|NOT_NULL)
+# ======================
+#     <create-table>         ::= CREATE TABLE <table-name>
+#                                (
+#                                    <list-col-definitions>
+#                                    [<comma> <index-definition>]
+#                                )
+#     <list-col-definitions> ::= <column-def> [<comma> <column-def>]
+#     <column-def>           ::= <colname> <data-type> [<null-constrain>]
+#     <index-definition>     ::= INDEX (<indexed-columns>) USING <index-type>]
 null_constrain = (Group(NOT+NULL)|Group(NULL)).setResultsName('null_constrain')
 column_definition = column_name + data_type + Optional(null_constrain)
 list_col_defs  = delimitedList(Group(column_definition))
-index_definition = INDEX + ON + index_columns + USING + index_type
-create_table_stmt = (CREATE + TABLE + table_name + LPAR +
+index_definition = INDEX + ON + indexed_columns + USING + index_type
+create_table_stmt = (CREATE + TABLE + table_name +
+                     LPAR +
                      list_col_defs.setResultsName('list_column_defs') +
                      Optional(comma + index_definition) +
                      RPAR)
 
 # Drop table and index Statements
+# ===============================
 drop_table_stmt = DROP + TABLE + table_name
 drop_index_stmt = DROP + INDEX  + index_name + ON + table_name
 
