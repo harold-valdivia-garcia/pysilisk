@@ -203,6 +203,21 @@ class AST_Delete(AST_Node):
         self.table = table
         self.where = where
 
+class AST_UpdateSetClause(AST_Node):
+    """Implements the set-clause
+    <set-clause> ::= <column> = <update source>"""
+    def __init__(self, column_name, update_source):
+        super().__init__(AST_Node.DELETE)
+        self.column_name = column_name
+        self.update_source = update_source
+
+# http://www.savage.net.au/SQL/sql-92.bnf
+class AST_Update(AST_Node):
+    def __init__(self, table, set_clauses, where):
+        super().__init__(AST_Node.DELETE)
+        self.table = table
+        self.set_clauses = set_clauses
+        self.where = where
 
 class AST_CreateIndex(AST_Node):
     def __init__(self, idx_name, table_name, list_column_names, idx_type):
