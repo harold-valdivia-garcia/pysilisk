@@ -5,8 +5,17 @@ from pyparsing import ParseResults
 
 
 
+class OrderType(object):
+    ASC = 0
+    DESC = 1
 
-
+    @classmethod
+    def from_string(cls, str_order_type):
+        str_order_type = str_order_type.upper()
+        if str_order_type in ['', 'ASC']:
+            return cls.ASC
+        elif str_order_type == 'DESC':
+            return cls.DESC
 
 class ComparisonOp(object):
     EQ = 3                # Conditional equality("=") expression
@@ -23,6 +32,7 @@ class LogicalOp(object):
 
 class AST_Node(object):
     TABLE = -1
+    STAR = -1
     EXPRESSION = -1
     DROP_TABLE = -1
     SELECT = -1
@@ -253,10 +263,10 @@ class AST_NotBoolExpr(AST_BooleanExpr):
 
 
 class AST_OrderByColumn(AST_Node):
-    def __init__(self, column, ordering):
+    def __init__(self, column, order_type):
         super().__init__(AST_Node.COLUMN_ORDER_BY)
-        self.column = column  # we only support ast-columns
-        self.ordering = ordering  # list of ascs or descs
+        self.ast_column = column  # we only support ast-columns
+        self.order_type = order_type  # list of ascs or descs
 
 
 class AST_Select(AST_Node):
@@ -285,6 +295,20 @@ class AST_CreateTable(AST_Node):
         self.table_name = table_name
         self.col_definitions = col_definitions
         self.index_definition = index_definition
+
+
+class AST_AllColumns(AST_Node):
+    def __init__(self):
+        super().__init__(AST_Node.STAR)
+
+
+class AST_Select(AST_Node):
+    def __init__(self, isdistinct, selectlist, fromlist, whereclause, order_by):
+        super().__init__(AST_Node.SELECT)
+        self.is_distinct = isdistinct
+        self.from_list = fromlist
+        self.where_clause = whereclause
+        self.order_by_list = order_by
 
 #
 # # Initial parse-implementation:
