@@ -257,13 +257,17 @@ create_index_stmt = (CREATE + INDEX + index_name + ON + table_name +
 #     <list-col-definitions> ::= <column-def> [<comma> <column-def>]
 #     <column-def>           ::= <colname> <data-type> [<null-constrain>]
 #     <index-definition>     ::= INDEX (<indexed-columns>) USING <index-type>]
-null_constrain = (Group(NOT+NULL)|Group(NULL)).setResultsName('null_constrain')
+null_constrain = (Group(NOT+NULL)|Group(NULL))
+null_constrain = null_constrain.setResultsName('null_constrain')
 column_definition = column_name + data_type + Optional(null_constrain)
-list_col_defs  = delimitedList(Group(column_definition))
+column_definition = column_definition.setResultsName('column_definition')
+list_column_defs  = delimitedList(Group(column_definition))
+list_column_defs  = list_column_defs.setResultsName('list_column_definitions')
 index_definition = INDEX + ON + indexed_columns + USING + index_type
+index_definition = index_definition.setResultsName('index_definition')
 create_table_stmt = (CREATE + TABLE + table_name +
                      LPAR +
-                     list_col_defs.setResultsName('list_column_defs') +
+                     list_column_defs +
                      Optional(comma + index_definition) +
                      RPAR)
 
