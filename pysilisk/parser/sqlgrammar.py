@@ -178,20 +178,26 @@ where_clause = Group(WHERE + bool_expr).setResultsName("where_clause")
 # consider the list-of-columns. To reduce the complexity of the execution of an
 # Insert-Stmt, pysilik supports only literals (not arith-expression) in the list
 # of values.
-#      <insert> := INSERT INTO <table> VALUES(literal [, literal]*)
+#      <insert> ::= INSERT INTO <table> VALUES(literal [, literal]*)
 insert_values = delimitedList(Group(literal_value)).setResultsName('insert_values')
 insert_stmt = INSERT + INTO + table_name + VALUES +LPAR + insert_values + RPAR
 
 # Delete Statement
 delete_stmt = (DELETE + FROM +table_name + Optional(where_clause))
 
+# http://www.savage.net.au/SQL/sql-92.bnff
+# http://www.contrib.andrew.cmu.edu/~shadow/sql/sql2bnf.aug92.txt
 # Update Statement
-# Similar to the insert-stmt, pysilik only supports literal as values
-column_and_value = Group(column_name + equal_op + literal_value)
-set_col_values = delimitedList(column_and_value)
+#      <update>          ::= UPDATE <table> SET <list-set-clause> [<where>]
+#      <list-set-clause> ::= <set-clause> [, <set-clause>]*
+#      <set-clause>      ::= <colname> = <update-source>
+#      <update-source>   ::= <arith-expr>
+update_source = arith_expr.setResultsName('update_source')
+set_clause = Group(column_name + equal_op + update_source)
+list_set_clauses = delimitedList(set_clause).setResultsName('list_set_clauses')
 update_stmt = (UPDATE + table_name +
-              SET + set_col_values.setResultsName('list_columns_and_values') +
-              Optional(where_clause))
+               SET + list_set_clauses +
+               Optional(where_clause))
 
 # Select Statement
 #      <from-table> := <table> [AS  <alias>] [, <table> [AS  <alias>]]*
