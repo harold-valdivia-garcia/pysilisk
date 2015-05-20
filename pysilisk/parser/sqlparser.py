@@ -64,43 +64,46 @@ def parse(sql_str):
         return AST_DropTable(table_name)
     elif stmt_type == 'CREATE_INDEX':
         idx_type = result.index_type
-        idx_name = result.index_name[0]
+        idxname = result.index_name[0]
         table_name = result.table_name[0]
-        list_idx_columns = [c for c in result.list_index_columns]
-        logger.debug('index: "%s"', idx_name)
+        list_idx_columns = [c for c in result.indexed_columns]
+        logger.debug('index: "%s"', idxname)
         logger.debug('table: "%s"', table_name)
         logger.debug('on-columns: "%s"', list_idx_columns)
         logger.debug('indexType: "%s"', idx_type)
-        return AST_CreateIndex(idx_name, table_name, list_idx_columns, idx_type)
+        return AST_CreateIndex(idxname, table_name, list_idx_columns, idx_type)
     elif stmt_type == 'CREATE_TABLE':
         table_name = result.table_name[0]
         logger.debug('table: "%s"', table_name)
-
         # Extract column-definitions
         ast_column_defs = []
-        for definition in result.list_column_defs:
+        for definition in result.list_column_definitions:
             col_name = definition.column_name[0]
             type_name = definition.data_type.type_name
             type_size = definition.data_type.size
             type_size = int(type_size) if type_size.isdigit() else -1
             null_constrain = ' '.join(definition.null_constrain)
-            null_identifier = NullConstrain.from_string(null_constrain)
-            msg = "colName: %s, typeName: %s, typeSize: %s, nullIdentifier: %s"
-            logger.debug(msg, col_name, type_name, type_size, null_identifier)
+            null_code = NullConstrain.from_string(null_constrain)
+            msg = ("colName: %s, typeName: %s, typeSize: %s, "
+                   "nullIdentifier: %s   -   "+null_constrain)
+            logger.debug(msg, col_name, type_name, type_size, null_code)
             # Create and append an ast-definition
             ast_column_defs.append(
-                AST_ColumnDefinition(col_name, type_name, type_size, null_identifier)
+                AST_ColumnDefinition(col_name, type_name, type_size, null_code)
             )
         # Extract index information
         ast_idx = None
-        if result.index_type != '':
-            idx_type = result.index_type
-            idx_columns = [c for c in result.list_index_columns]
-            idx_name = 'pk_%s' % table_name  # Only 1 clustered-index per table
-            logger.debug('index: "%s"', idx_name)
-            logger.debug('index-columns: "%s"', idx_columns)
-            logger.debug('indexType: "%s"', idx_type)
-            ast_idx = AST_CreateIndex(idx_name, table_name, idx_columns, idx_type)
+        if result.index_definition != '':
+            index_definition = result.index_definition
+            idx_type = index_definition.index_type
+            idxed_cols = [c for c in index_definition.indexed_columns]
+            idxname = 'pk_%s' % table_name  # Only 1 clustered-index per table
+                                             # Therefore, we use pk_<table> as
+                                             # the index-name
+            logger.debug('index-name: "%s"', idxname)
+            logger.debug('indexed-columns: "%s"', idxed_cols)
+            logger.debug('index-type: "%s"', idx_type)
+            ast_idx = AST_CreateIndex(idxname, table_name, idxed_cols, idx_type)
         return AST_CreateTable(table_name, ast_column_defs, ast_idx)
     elif stmt_type == 'INSERT':
         table_name = result.table_name[0]
@@ -142,6 +145,18 @@ def parse(sql_str):
         else:
             ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
         return AST_Update(table_name, list_set_clauses, ast_where_clause)
+    elif stmt_type == 'SELECT':
+        from_clause = result.from_clause
+        projected_attrs = result.projected_attributes
+        where_clause = result.where_clause
+        logger.debug('keys: %s', list(result.keys()))
+        logger.debug('from %s  -  name: %s', from_clause, from_clause.getName())
+        logger.debug('from-keys: %s', list(from_clause.keys()))
+        logger.debug('from-tables: %s', from_clause.list_tables)
+        logger.debug('from %s  -  name: %s', projected_attrs, projected_attrs.getName())
+        logger.debug('from %s  -  name: %s', where_clause, where_clause.getName())
+
+
     else:
         msg = 'Unknown Stmt-type: "%s" in query: "%s"' % (stmt_type, sql_str)
         raise UnknownStatementOrExpressionException(msg)
