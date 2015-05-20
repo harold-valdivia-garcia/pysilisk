@@ -10,7 +10,7 @@
 #   http://stackoverflow.com/questions/16909380/sql-parsing-using-pyparsing
 #
 # The references above could not handle some complex arith-expression or
-# they were extremely slow. So, I decided to implemented by myself.
+# they were extremely slow. So, I decided to implement it by myself.
 #
 # The statements supported are:
 #   INSERT
@@ -31,17 +31,21 @@ from pyparsing import alphas, alphanums, CaselessKeyword, ZeroOrMore
 from pyparsing import Optional, delimitedList, Regex
 
 # Define keywords
-(SELECT, FROM, WHERE, AS, NULL, NOT,AND, OR, DISTINCT, ALL, INSERT, INTO,
- VALUES, DELETE, UPDATE, SET, CREATE, INDEX, USING, BTREE, HASH,
+# Note: Don't remove whitespaces otherwise
+#       replace(",", "").split() won't work
+(SELECT, FROM, WHERE, AS, NULL, NOT,AND, OR, DISTINCT, ALL, INSERT,
+ INTO, VALUES, DELETE, UPDATE, SET, CREATE, INDEX, USING, BTREE, HASH,
  ON, INTEGER, FLOAT, DATETIME, DATE, VARCHAR, CHAR, TABLE, DATABASE,
- DROP) = map(CaselessKeyword, """SELECT, FROM, WHERE, AS, NULL, NOT, AND,
- OR, DISTINCT, ALL, INSERT, INTO, VALUES, DELETE, UPDATE, SET, CREATE,
- INDEX, USING, BTREE, HASH, ON, INTEGER, FLOAT, DATETIME, DATE, VARCHAR,
- CHAR, TABLE, DATABASE, DROP""".replace(",","").split())
+ DROP, ORDER, BY, ASC, DESC) = map(CaselessKeyword, """SELECT, FROM,
+ WHERE, AS, NULL, NOT, AND, OR, DISTINCT, ALL, INSERT, INTO, VALUES,
+ DELETE, UPDATE, SET, CREATE, INDEX, USING, BTREE, HASH, ON, INTEGER,
+ FLOAT, DATETIME, DATE, VARCHAR, CHAR, TABLE, DATABASE, DROP, ORDER,
+ BY, ASC, DESC""".replace(",","").split())
 
-keywords = (SELECT|FROM|WHERE|AS|NULL|NOT|AND|OR|DISTINCT|ALL|INSERT|INTO|
-            VALUES|DELETE|UPDATE|SET|CREATE|INDEX|USING|BTREE|HASH|ON|
-            INTEGER|FLOAT|DATETIME|DATE|VARCHAR|CHAR|TABLE|DATABASE|DROP)
+keywords = (SELECT|FROM|WHERE|AS|NULL|NOT|AND|OR|DISTINCT|ALL|INSERT|
+            INTO|VALUES|DELETE|UPDATE|SET|CREATE|INDEX|USING|BTREE|HASH|
+            ON|INTEGER|FLOAT|DATETIME|DATE|VARCHAR|CHAR|TABLE|DATABASE|
+            DROP|ORDER|BY|ASC|DESC)
 
 # Define basic symbols
 LPAR, RPAR = map(Suppress, '()')
@@ -104,8 +108,8 @@ column = column.setResultsName('column')
 #      <signed factor>  ::= [<sign>] <factor>
 #      <factor>         ::= <literal> | <column> | function | (<bool-expr>)
 #
-# Note: Writing a perfect grammar for the boolean and arithmetic expressions
-#       are beyond the scope of this project. I followed the approach suggested
+# Note: Writing a perfect grammar for boolean and arithmetic expressions are
+#       beyond the scope of this project. I followed the approach suggested
 #       by Crenshaw [1].
 # References:
 # [1] http://compilers.iecc.com/crenshaw/tutor6.txt
@@ -196,7 +200,9 @@ delete_stmt = (DELETE + FROM +table_name + Optional(where_clause))
 
 # Update Statement
 # ================
-#      <update>          ::= UPDATE <table> SET <list-set-clause> [<where>]
+#      <update>          ::= UPDATE <table>
+#                            SET <list-set-clause>
+#                            [<where-clause>]
 #      <list-set-clause> ::= <set-clause> [, <set-clause>]*
 #      <set-clause>      ::= <colname> = <update-source>
 #      <update-source>   ::= <arith-expr>
@@ -209,29 +215,48 @@ update_stmt = (UPDATE + table_name +
 
 # Select Statement
 # ================
-#      <select>         ::= SELECT [<set-quantifier>] <select list>
+#      <select>         ::= SELECT [DISTINCT] <select list>
 #                           <from-clause>
-#                           <where-clause>
-#      <set-quantifier> ::= DISTINCT | ALL
+#                           [<where-clause>]
+#                           [<order-by-clause>]
+#
 #      <select list>    ::= <start> | <derived-col> [<comma> <derived-col>]*
 #      <derived-col>    ::= <arith-expr> [AS <alias>]
+#
 #      <from-clause>    ::= FROM <list-tables>
 #      <list-tables>    ::= <from-table> [<comma> <from-table>]*
 #      <from-table>     ::= <table> [AS  <alias>]
+#
+#      <order-by-clause>::= ORDER BY <list-sort-spec>
+#      <list-sort-spec> ::= <sort-spec> [<comma> <sort-spec>]
+#      <sort-spec>      ::= <colname> [ASC|DESC]
+
+sort_spec = Group(column + Optional(ASC|DESC).setResultsName('order_type'))
+sort_spec = sort_spec.setResultsName('sort_spec')
+list_sort_spec = delimitedList(sort_spec)
+list_sort_spec = list_sort_spec.setResultsName('list_sort_spec')
+order_by_clause = Group(ORDER + BY + list_sort_spec)
+order_by_clause = order_by_clause.setResultsName('order_by_clause')
+
 alias = identifier.copy().setResultsName('alias')
 from_table = Group(table_name + Optional(Optional(AS) + alias))
 from_table = from_table.setResultsName("from_table")
+
 list_tables = delimitedList(from_table)
 list_tables = list_tables.setResultsName("list_tables")
 from_clause = Group(FROM + list_tables).setResultsName("from_clause")
+
 derived_column = Group(arith_expr + Optional(AS+alias))
+derived_column = derived_column.setResultsName('derived_column')
 star = Literal("*").setResultsName('star')
-select_list = star|delimitedList(derived_column)
+select_list = star|Group(delimitedList(derived_column))
 select_list = select_list.setResultsName("select_list")
-set_quantifier = (DISTINCT|ALL).setResultsName("set_quantifier")
-select_stmt = (SELECT + Optional(set_quantifier) + select_list +
+
+DISTINCT = DISTINCT.setResultsName("distinct")
+select_stmt = (SELECT + Optional(DISTINCT) + select_list +
               from_clause +
-              Optional(where_clause))
+              Optional(where_clause) +
+              Optional(order_by_clause))
 
 # Create-Index Statement
 # ======================
@@ -290,4 +315,3 @@ SQL_GRAMMAR = (select_stmt.setResultsName('SELECT')|
 # Other commands such as 'create-db', 'use-db' 'help' or 'quit' are not
 # supported by the grammar. These commands and others are implemented in
 # the console (cli) as meta-commands
-
