@@ -9,8 +9,8 @@ from pysilisk.parser.ast import AST_Delete, AST_OR, AST_AND, AST_NotBoolExpr
 from pysilisk.parser.ast import AST_EQ, AST_NEQ, AST_GTE, AST_LTE, AST_GT
 from pysilisk.parser.ast import AST_LT, AST_Add, AST_Sub, AST_Mult, AST_Div
 from pysilisk.parser.ast import AST_NegArithExpr, AST_Column, AST_FunctionCall
-from pysilisk.parser.ast import NullConstrain, AST_EmptyExpr, AST_UpdateSetClause
-from pysilisk.parser.ast import AST_Update
+from pysilisk.parser.ast import NullConstrain, AST_EmptyExpr, AST_UpdateSetClause, AST_AllColumns
+from pysilisk.parser.ast import AST_Update, AST_Table, AST_OrderByColumn, OrderType, AST_Select
 
 
 logger = logging.getLogger(__name__)
@@ -146,15 +146,48 @@ def parse(sql_str):
             ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
         return AST_Update(table_name, list_set_clauses, ast_where_clause)
     elif stmt_type == 'SELECT':
-        from_clause = result.from_clause
-        projected_attrs = result.projected_attributes
-        where_clause = result.where_clause
-        logger.debug('keys: %s', list(result.keys()))
-        logger.debug('from %s  -  name: %s', from_clause, from_clause.getName())
-        logger.debug('from-keys: %s', list(from_clause.keys()))
-        logger.debug('from-tables: %s', from_clause.list_tables)
-        logger.debug('from %s  -  name: %s', projected_attrs, projected_attrs.getName())
-        logger.debug('from %s  -  name: %s', where_clause, where_clause.getName())
+        is_distinct = True if result.distinct == 'DISTINCT' else False
+
+        # select-list
+        logger.debug('select-list:')
+        select_list = []
+        for derived_column in result.select_list:
+            if derived_column == '*':
+                select_list.append(AST_AllColumns())
+                break
+            logger.debug('  derived-column: %s', derived_column)
+            ast_derived_column = to_ast_expr(derived_column[0], 'arith_expr')
+            select_list.append(ast_derived_column)
+
+        # from-clause
+        from_list = []
+        logger.debug('from-list:')
+        for from_table in result.from_clause.list_tables:
+            logger.debug('  from-table: %s', from_table)
+            table_name = from_table.table_name[0]
+            alias = from_table.alias[0] if from_table.alias != '' else ''
+            ast_table = AST_Table(table_name, alias)
+            from_list.append(ast_table)
+
+        # where-clause
+        logger.debug('where-clause:')
+        if result.where_clause == '':
+            ast_where_clause = AST_EmptyExpr()
+        else:
+            ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
+
+        # order-by-clause
+        logger.debug('orderby-list:')
+        order_by_list = []
+        if result.order_by_clause != '':
+            for sort_spec in result.order_by_clause.list_sort_spec:
+                logger.debug('  sort-spec: %s', sort_spec)
+                ast_column = to_ast_expr(sort_spec.column, 'column')
+                order_type = OrderType.from_string(sort_spec.order_type)
+                ast_sort_spec = AST_OrderByColumn(ast_column, order_type)
+                order_by_list.append(ast_sort_spec)
+        return AST_Select(is_distinct, None, from_list, ast_where_clause, order_by_list)
+
 
 
     else:
