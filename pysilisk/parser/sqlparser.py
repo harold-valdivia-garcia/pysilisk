@@ -2,15 +2,16 @@ import logging
 import pyparsing
 
 from pysilisk.parser.sqlgrammar import SQL_GRAMMAR
-from pysilisk.parser.ast import AST_DropIndex, AST_DropTable, AST_CreateIndex
-from pysilisk.parser.ast import AST_ColumnDefinition, AST_CreateTable
-from pysilisk.parser.ast import AST_NumberLiteral, AST_StringLiteral, AST_Insert
-from pysilisk.parser.ast import AST_Delete, AST_OR, AST_AND, AST_NotBoolExpr
-from pysilisk.parser.ast import AST_EQ, AST_NEQ, AST_GTE, AST_LTE, AST_GT
-from pysilisk.parser.ast import AST_LT, AST_Add, AST_Sub, AST_Mult, AST_Div
-from pysilisk.parser.ast import AST_NegArithExpr, AST_Column, AST_FunctionCall
-from pysilisk.parser.ast import NullConstrain, AST_EmptyExpr, AST_UpdateSetClause, AST_AllColumns
-from pysilisk.parser.ast import AST_Update, AST_Table, AST_OrderByColumn, OrderType, AST_Select
+from pysilisk.parser.ast import AST_DropIndex, AST_Update, AST_UpdateSetClause
+from pysilisk.parser.ast import AST_ColumnDefinition, AST_CreateTable, AST_Table
+from pysilisk.parser.ast import AST_NumberLiteral, AST_StringLiteral, OrderType
+from pysilisk.parser.ast import AST_OR, AST_EQ, AST_FunctionCall, AST_EmptyExpr
+from pysilisk.parser.ast import AST_NEQ, AST_GTE, AST_LTE, AST_Mult, AST_Insert
+from pysilisk.parser.ast import AST_NegArithExpr, AST_Column, AST_LT, AST_Select
+from pysilisk.parser.ast import AST_Add, AST_Sub, AST_Div, AST_GT, AST_DropTable
+from pysilisk.parser.ast import NullConstrain, AST_OrderByColumn, AST_AllColumns
+from pysilisk.parser.ast import AST_NotBoolExpr, AST_CreateIndex, AST_Delete
+from pysilisk.parser.ast import AST_AND
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class SQLParser(object):
                      ____________ ast-select ___________________
                    /                     \                       \
                  /                        \                       \
-          prj_attrs                   from_clause             where_clause
+         select_list                  from_clause             where_clause
           /       \                    /       \                   |
     ast-col       ast-div         ast-tbl     ast-tbl          ast-equal
      (name)        /    \       (student)    (course)           /     \
@@ -58,108 +59,142 @@ def parse(sql_str):
         logger.debug('index: "%s"', index_name)
         logger.debug('table: "%s"', table_name)
         return AST_DropIndex(index_name, table_name)
+        # ==============================================================
     elif stmt_type == 'DROP_TABLE':
         table_name = result.table_name[0]
         logger.debug('table: "%s"', table_name)
         return AST_DropTable(table_name)
+        # ==============================================================
     elif stmt_type == 'CREATE_INDEX':
-        idx_type = result.index_type
-        idxname = result.index_name[0]
+        idx_name = result.index_name[0]
         table_name = result.table_name[0]
-        list_idx_columns = [c for c in result.indexed_columns]
-        logger.debug('index: "%s"', idxname)
+        logger.debug('index-name: "%s"', idx_name)
         logger.debug('table: "%s"', table_name)
+
+        list_idx_columns = [c for c in result.indexed_columns]
+        idx_type = result.index_type
         logger.debug('on-columns: "%s"', list_idx_columns)
         logger.debug('indexType: "%s"', idx_type)
-        return AST_CreateIndex(idxname, table_name, list_idx_columns, idx_type)
+
+        return AST_CreateIndex(idx_name, table_name, list_idx_columns, idx_type)
+        # ==============================================================
     elif stmt_type == 'CREATE_TABLE':
         table_name = result.table_name[0]
         logger.debug('table: "%s"', table_name)
+
         # Extract column-definitions
         ast_column_defs = []
         for definition in result.list_column_definitions:
             col_name = definition.column_name[0]
             type_name = definition.data_type.type_name
+
             type_size = definition.data_type.size
             type_size = int(type_size) if type_size.isdigit() else -1
+
             null_constrain = ' '.join(definition.null_constrain)
             null_code = NullConstrain.from_string(null_constrain)
+
             msg = ("colName: %s, typeName: %s, typeSize: %s, "
                    "nullIdentifier: %s   -   "+null_constrain)
             logger.debug(msg, col_name, type_name, type_size, null_code)
+
             # Create and append an ast-definition
             ast_column_defs.append(
                 AST_ColumnDefinition(col_name, type_name, type_size, null_code)
             )
+
         # Extract index information
         ast_idx = None
         if result.index_definition != '':
             index_definition = result.index_definition
+
+            # Only 1 clustered-index per table. So,
+            # we use pk_<table> as the index-name
+            idx_name = 'pk_%s' % table_name
+            indexed_cols = [c for c in index_definition.indexed_columns]
             idx_type = index_definition.index_type
-            idxed_cols = [c for c in index_definition.indexed_columns]
-            idxname = 'pk_%s' % table_name  # Only 1 clustered-index per table
-                                             # Therefore, we use pk_<table> as
-                                             # the index-name
-            logger.debug('index-name: "%s"', idxname)
-            logger.debug('indexed-columns: "%s"', idxed_cols)
+
+            args = (idx_name, table_name, indexed_cols, idx_type)
+            ast_idx = AST_CreateIndex(*args)
+
+            logger.debug('index-name: "%s"', idx_name)
+            logger.debug('indexed-columns: "%s"', indexed_cols)
             logger.debug('index-type: "%s"', idx_type)
-            ast_idx = AST_CreateIndex(idxname, table_name, idxed_cols, idx_type)
         return AST_CreateTable(table_name, ast_column_defs, ast_idx)
+        # ==============================================================
     elif stmt_type == 'INSERT':
         table_name = result.table_name[0]
         logger.debug('table: "%s"', table_name)
+
+        # Extract list-of-values
         ast_inserted_values = []
         for literal in result.insert_values:
             literal_value = literal[0]
             literal_type = literal.getName()
+            logger.debug('value: %s - type: %s', literal_value, literal_type)
+
+            # The ast for the literal (we don't support expr)
+            # ast-number is used for both integers and floats
+            # ast-string is used for varchar, char, date and datetime
+            #       although date and datetime are entered as strings,
+            #       they are stored as integers and floats respectively
             ast_value = None
             if literal_type in ['integer_literal', 'float_literal']:
                 ast_value = AST_NumberLiteral(float(literal_value))
             elif literal_type == 'string_literal':
                 ast_value = AST_StringLiteral(literal_value)
             ast_inserted_values.append(ast_value)
-            logger.debug('value: %s  -  type: %s', literal_value, literal_type)
         return AST_Insert(table_name, ast_inserted_values)
+        # ==============================================================
     elif stmt_type == 'DELETE':
         table_name = result.table_name[0]
         logger.debug('table: %s', table_name)
         if result.where_clause == '':
-            ast_where_clause = AST_EmptyExpr()
+            ast_where = AST_EmptyExpr()
         else:
-            ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
-        return AST_Delete(table_name, ast_where_clause)
+            where_clause = result.where_clause
+            ast_where = to_ast_expr(where_clause, 'where_clause')
+        return AST_Delete(table_name, ast_where)
+        # ==============================================================
     elif stmt_type == 'UPDATE':
         table_name = result.table_name[0]
         logger.debug('table: %s', table_name)
+
+        # Extract the <col = value>
+        logger.debug('update-set-clauses:')
         list_set_clauses = []
         for set_clause in result.list_set_clauses:
             colname = set_clause.column_name[0]
             update_source = set_clause.update_source[0]
-            logger.debug('set-clause-column: %s', colname)
-            logger.debug('set-clause-update-source: %s', update_source)
+            logger.debug('   column: %s', colname)
+            logger.debug('   update-source: %s', update_source)
+
             ast_update_source = to_ast_expr(update_source, 'arith_expr')
             ast_set_clause = AST_UpdateSetClause(colname, ast_update_source)
             list_set_clauses.append(ast_set_clause)
+
         if result.where_clause == '':
-            ast_where_clause = AST_EmptyExpr()
+            ast_where = AST_EmptyExpr()
         else:
-            ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
-        return AST_Update(table_name, list_set_clauses, ast_where_clause)
+            where_clause = result.where_clause
+            ast_where = to_ast_expr(where_clause, 'where_clause')
+        return AST_Update(table_name, list_set_clauses, ast_where)
+        # ==============================================================
     elif stmt_type == 'SELECT':
         is_distinct = True if result.distinct == 'DISTINCT' else False
 
-        # select-list
+        # Extract the select-list
         logger.debug('select-list:')
         select_list = []
         for derived_column in result.select_list:
+            logger.debug('  derived-column: %s', derived_column)
             if derived_column == '*':
                 select_list.append(AST_AllColumns())
                 break
-            logger.debug('  derived-column: %s', derived_column)
             ast_derived_column = to_ast_expr(derived_column[0], 'arith_expr')
             select_list.append(ast_derived_column)
 
-        # from-clause
+        # Extract the tables in the from-clause
         from_list = []
         logger.debug('from-list:')
         for from_table in result.from_clause.list_tables:
@@ -172,24 +207,25 @@ def parse(sql_str):
         # where-clause
         logger.debug('where-clause:')
         if result.where_clause == '':
-            ast_where_clause = AST_EmptyExpr()
+            ast_where = AST_EmptyExpr()
         else:
-            ast_where_clause = to_ast_expr(result.where_clause, 'where_clause')
+            where_clause = result.where_clause
+            ast_where = to_ast_expr(where_clause, 'where_clause')
 
-        # order-by-clause
-        logger.debug('orderby-list:')
+        # Extract the order-by-clause
+        logger.debug('order-by-list:')
         order_by_list = []
         if result.order_by_clause != '':
             for sort_spec in result.order_by_clause.list_sort_spec:
                 logger.debug('  sort-spec: %s', sort_spec)
                 ast_column = to_ast_expr(sort_spec.column, 'column')
                 order_type = OrderType.from_string(sort_spec.order_type)
+
                 ast_sort_spec = AST_OrderByColumn(ast_column, order_type)
                 order_by_list.append(ast_sort_spec)
-        return AST_Select(is_distinct, None, from_list, ast_where_clause, order_by_list)
-
-
-
+        args = (is_distinct, select_list, from_list, ast_where, order_by_list)
+        return AST_Select(*args)
+        # ==============================================================
     else:
         msg = 'Unknown Stmt-type: "%s" in query: "%s"' % (stmt_type, sql_str)
         raise UnknownStatementOrExpressionException(msg)
@@ -219,7 +255,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
     if _type == 'where_clause':
         next_expr = parsed_expr.bool_expr
         return to_ast_expr(next_expr, 'bool_expr', new_depth, _type)
-        # ============================================
+        # ==============================================================
     elif _type == 'bool_expr':
         # RULE:
         #       <bool-expr>  ::=  <bool-term> [OR <bool-term>]*
@@ -244,7 +280,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
             # Set the ast-operation
             left_ast = AST_OR(left_expr=left_ast, right_expr=right_ast)
         return  left_ast
-        # ============================================
+        # ==============================================================
     elif _type == 'bool_term':
         # RULE:
         #       <bool-term>  ::=  <not-factor> [AND <not-factor>]*
@@ -267,7 +303,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
             # Set the ast-operation
             left_ast = AST_AND(left_expr=left_ast, right_expr=right_ast)
         return  left_ast
-        # ============================================
+        # ==============================================================
     elif _type == 'bool_factor':
         # RULE:
         #      <bool-factor>  ::=  [NOT] <predicate>
@@ -279,7 +315,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
         if not_op == 'NOT':
             return AST_NotBoolExpr(ast_expr)
         return ast_expr
-        # ============================================
+        # ==============================================================
     elif _type == 'predicate':
         # RULE:
         #       <predicate>  ::=  <arith-expr> [<pred-op> <arith-expr>]
@@ -312,7 +348,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
             ast_op.right_expr = right_ast
             left_ast = ast_op
         return  left_ast
-        # ============================================
+        # ==============================================================
     elif _type == 'arith_expr':
         # RULE:
         #       <arith-expr>  ::=  <term> [<add-op> <term>]*
@@ -341,7 +377,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
             ast_op.right_expr = right_ast
             left_ast = ast_op
         return  left_ast
-        # ============================================
+        # ==============================================================
     elif _type == 'term':
         # RULE:
         #       <term>  ::=  <signed factor> [<mult-op> factor]*
@@ -370,7 +406,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
             ast_op.right_expr = right_ast
             left_ast = ast_op
         return  left_ast
-        # ============================================
+        # ==============================================================
     elif _type == 'signed_factor':
         # RULE:
         #       <signed factor>  ::=  [<sign>] <factor>
@@ -382,7 +418,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
         if sign_op == '-':
             return AST_NegArithExpr(ast_expr)
         return ast_expr
-        # ============================================
+        # ==============================================================
     elif _type == 'factor':
         # RULE:
         #       <factor>  ::=  <literal> | <column> | function | (<bool-expr>)
@@ -399,22 +435,22 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
             return to_ast_expr(factor.bool_expr, 'bool_expr', new_depth, _type)
         else:
             return  to_ast_expr(factor[0], factor_name, new_depth, _type)
-        # ============================================
+        # ==============================================================
     elif _type == 'integer_literal':
         logger.debug('%s- value: %s', align, parsed_expr)
         integer_literal = parsed_expr
         return AST_NumberLiteral(int(integer_literal))
-        # ============================================
+        # ==============================================================
     elif _type == 'float_literal':
         logger.debug('%s- value: %s', align, parsed_expr)
         float_literal = parsed_expr
         return AST_NumberLiteral(float(float_literal))
-        # ============================================
+        # ==============================================================
     elif _type == 'string_literal':
         logger.debug('%s- value: %s', align, parsed_expr)
         string_literal =  parsed_expr
         return AST_StringLiteral(string_literal)
-        # ============================================
+        # ==============================================================
     elif _type == 'column':
         column = parsed_expr
         column_name = column.column_name[0]
@@ -422,7 +458,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
         logger.debug('%s- tbname: %s', align, table_name)
         logger.debug('%s- colname: %s', align, column_name)
         return AST_Column(column_name, table_name)
-        # ============================================
+        # ==============================================================
     elif _type == 'function':
         function = parsed_expr
         funct_name = function.funct_name[0]
@@ -439,7 +475,7 @@ def to_ast_expr(parsed_expr, _type, depth=0, parent=None):
             arguments.append(ast_arg)
         ast_expr = AST_FunctionCall(funct_name, arguments)
         return ast_expr
-        # ============================================
+        # ==============================================================
     else:
         msg = ('Unknown Expr-type: "%s" (parent-type: "%s") in '
                'Expr: "%s"') % (_type, parent, parsed_expr)
